@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Cultura (Karnataka Heritage Guide)
 
 Local dev-ready React + Vite app with a secure server-side proxy for Gemini.
@@ -28,3 +29,6 @@ Notes
 
 Security
 - Keep your `.env` out of source control. Rotate keys if they were previously committed.
+=======
+# Cultura-chatbot
+>>>>>>> 469be2e6b4a497ddcb4b9390acb2fd97fcea7841
