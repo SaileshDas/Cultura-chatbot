@@ -1,0 +1,36 @@
+:root{--orange:#f97316;--amber:#f59e0b;--bg1:#fff7ed}
+*{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial}
+body,html,#root{height:100%;margin:0}
+.app-shell{min-height:100vh;display:flex;flex-direction:column}
+.header{background:linear-gradient(90deg,#f59e0b,#fb923c);color:white;padding:12px 20px}
+.header-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:12px;align-items:center}
+.logo{width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center}
+.title{margin:0;font-size:22px}
+.subtitle{margin:0;font-size:12px;opacity:0.95}
+.header-actions{display:flex;gap:8px}
+.btn{background:rgba(255,255,255,0.12);color:white;border:0;padding:8px 10px;border-radius:10px;display:inline-flex;gap:8px;align-items:center;cursor:pointer}
+.btn.small{padding:8px}
+.main{max-width:1100px;margin:18px auto;display:flex;gap:18px;padding:0 12px;flex:1}
+.character-panel{width:260px}
+.character-card{background:linear-gradient(180deg,#fff,#fff7ed);padding:18px;border-radius:18px;border:2px solid #ffdca8}
+.character-portrait{height:340px;border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#fff,#fffaf0);display:flex;align-items:center;justify-content:center}
+.character-root{width:100%;height:100%}
+.character-sprite{width:80%;height:80%;background-image:url('https://i.postimg.cc/262zYt3g/cultura-sprite.png');background-size:500% 100%;background-repeat:no-repeat;border-radius:8px}
+.expression-pill{display:inline-block;padding:6px 12px;background:linear-gradient(90deg,#fff7ed,#fff1e6);border-radius:999px;border:1px solid #ffdca8;margin-bottom:6px}
+.quote{font-size:12px;color:#6b7280}
+.chat-area{flex:1;display:flex;flex-direction:column}
+.messages{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.message-row{display:flex}
+.message-row.user{justify-content:flex-end}
+.message{max-width:70%;padding:12px;border-radius:14px}
+.message-bot{background:linear-gradient(180deg,#fffef9,#fff7ed);border:1px solid #fcdcb7}
+.message-user{background:linear-gradient(180deg,#fb923c,#ef4444);color:white}
+.input-row{display:flex;gap:10px;padding:12px;border-top:1px solid #fde68a;background:linear-gradient(90deg,#fffaf0,#fff6ee)}
+.input-row input{flex:1;padding:12px;border-radius:12px;border:1px solid #f3e8d6}
+.send-btn{background:linear-gradient(90deg,#fb923c,#ef4444);color:white;border-radius:12px;padding:10px 14px}
+.map-view{position:relative;padding:18px}
+.map-canvas{position:relative;height:420px;background:linear-gradient(180deg,#fff7e6,#fff1f0);border-radius:12px;border:3px solid #fec89a}
+.map-marker{position:absolute;width:44px;height:44px;border-radius:999px;border:3px solid white;background:linear-gradient(180deg,#fb7185,#fb923c);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.map-hint{position:absolute;left:12px;bottom:12px;background:white;padding:8px;border-radius:8px;border:1px solid #fcdcb7}
+.close-btn{position:absolute;right:18px;top:8px;background:#ef4444;color:white;border:0;padding:8px 10px;border-radius:10px}

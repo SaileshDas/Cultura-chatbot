@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* minimal custom styles for sprite sizing */
+.character-sprite{background-size:500% 100%;background-repeat:no-repeat}
