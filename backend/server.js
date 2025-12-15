@@ -4,9 +4,12 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenAI } = require('@google/genai'); // <-- Import the SDK
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = 3001;
+const jwtSecret = process.env.JWT_SECRET || 'dev-change-me';
 
 // --- Gemini Setup ---
 const apiKey = process.env.GEMINI_API_KEY;
@@ -17,16 +20,42 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey });
 
-// --- Chat History Storage (in-memory) ---
-// Maps session IDs to conversation histories
-const chatSessions = new Map();
+// --- In-memory Users & Chats (for local development) ---
+// In production, replace this with a real database.
+const users = new Map(); // key: username, value: { id, username, passwordHash, profile }
+const chatsByUser = new Map(); // key: userId, value: [{ id, title, messages: [{ role, text, createdAt }] }]
 
-// Helper function to get or create a session
-function getOrCreateSession(sessionId) {
-    if (!chatSessions.has(sessionId)) {
-        chatSessions.set(sessionId, []);
+function getUserById(id) {
+    for (const user of users.values()) {
+        if (user.id === id) return user;
     }
-    return chatSessions.get(sessionId);
+    return null;
+}
+
+function getUserChats(userId) {
+    if (!chatsByUser.has(userId)) {
+        chatsByUser.set(userId, []);
+    }
+    return chatsByUser.get(userId);
+}
+
+function findChat(userId, chatId) {
+    const chats = getUserChats(userId);
+    return chats.find((c) => c.id === chatId);
+}
+
+function createChat(userId, title) {
+    const chats = getUserChats(userId);
+    const id = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const chat = {
+        id,
+        title: title || 'New chat',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: [],
+    };
+    chats.unshift(chat);
+    return chat;
 }
 
 // System instruction defines the chatbot's personality and knowledge domain
@@ -59,22 +88,207 @@ Remember: You're not a tourist guide—you're a Kannadiga sharing your heritage.
 app.use(cors());
 app.use(express.json()); // Middleware to parse JSON body requests
 
-app.post('/api/chat', async (req, res) => {
+// --- Auth Middleware ---
+function authMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+        return res.status(401).json({ error: 'Authorization token missing.' });
+    }
+
+    try {
+        const payload = jwt.verify(token, jwtSecret);
+        const user = getUserById(payload.id);
+        if (!user) {
+            return res.status(401).json({ error: 'Account no longer exists.' });
+        }
+        req.user = { id: user.id, username: user.username };
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: 'Invalid or expired token.' });
+    }
+}
+
+// --- Auth Routes ---
+app.post('/api/auth/register', async (req, res) => {
+    const { username, password } = req.body || {};
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required.' });
+    }
+
+    const normalizedUsername = String(username).toLowerCase();
+
+    if (users.has(normalizedUsername)) {
+        return res.status(409).json({ error: 'An account with this username already exists.' });
+    }
+
+    try {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const user = {
+            id,
+            username: normalizedUsername,
+            passwordHash,
+            profile: {
+                fullName: '',
+                homeCity: '',
+                homeCountry: '',
+                homeAirport: '',
+                preferredLanguages: [],
+                travelInterests: '',
+                travelStyle: '',
+                budgetLevel: '',
+                accessibilityNeeds: '',
+                favouriteRegions: '',
+                notes: '',
+            },
+        };
+        users.set(normalizedUsername, user);
+
+        const token = jwt.sign({ id: user.id, username: user.username }, jwtSecret, { expiresIn: '7d' });
+        return res.json({ token, user: { id: user.id, username: user.username } });
+    } catch (err) {
+        console.error('Register error:', err);
+        return res.status(500).json({ error: 'Failed to create account.' });
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password } = req.body || {};
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required.' });
+    }
+
+    const normalizedUsername = String(username).toLowerCase();
+    const user = users.get(normalizedUsername);
+
+    if (!user) {
+        return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    const passwordOk = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordOk) {
+        return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username }, jwtSecret, { expiresIn: '7d' });
+    return res.json({ token, user: { id: user.id, username: user.username } });
+});
+
+app.get('/api/auth/me', authMiddleware, (req, res) => {
+    return res.json({ user: { id: req.user.id, username: req.user.username } });
+});
+
+// --- Profile Routes ---
+app.get('/api/profile', authMiddleware, (req, res) => {
+    const user = getUserById(req.user.id);
+    if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+    }
+    res.json({ username: user.username, profile: user.profile || {} });
+});
+
+app.put('/api/profile', authMiddleware, (req, res) => {
+    const user = getUserById(req.user.id);
+    if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+    }
+    const incoming = req.body && req.body.profile ? req.body.profile : {};
+    user.profile = {
+        ...(user.profile || {}),
+        ...incoming,
+    };
+    res.json({ username: user.username, profile: user.profile });
+});
+
+// Delete account and all associated chats
+app.delete('/api/account', authMiddleware, (req, res) => {
+    const user = getUserById(req.user.id);
+    if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+    }
+    users.delete(user.username);
+    chatsByUser.delete(user.id);
+    res.json({ message: 'Account and all chats deleted.' });
+});
+
+// --- Chat Management Routes (per-user) ---
+app.get('/api/chats', authMiddleware, (req, res) => {
+    const chats = getUserChats(req.user.id).map((c) => ({
+        id: c.id,
+        title: c.title,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+    }));
+    res.json({ chats });
+});
+
+app.post('/api/chats', authMiddleware, (req, res) => {
+    const { title } = req.body || {};
+    const chat = createChat(req.user.id, title);
+    res.status(201).json({ chat });
+});
+
+app.get('/api/chats/:chatId', authMiddleware, (req, res) => {
+    const { chatId } = req.params;
+    const chat = findChat(req.user.id, chatId);
+    if (!chat) {
+        return res.status(404).json({ error: 'Chat not found.' });
+    }
+    res.json({ chat });
+});
+
+app.delete('/api/chats/:chatId', authMiddleware, (req, res) => {
+    const { chatId } = req.params;
+    const chats = getUserChats(req.user.id);
+    const index = chats.findIndex((c) => c.id === chatId);
+    if (index === -1) {
+        return res.status(404).json({ error: 'Chat not found.' });
+    }
+    chats.splice(index, 1);
+    res.json({ message: 'Chat deleted.' });
+});
+
+// Update chat metadata (e.g. title)
+app.patch('/api/chats/:chatId', authMiddleware, (req, res) => {
+    const { chatId } = req.params;
+    const { title } = req.body || {};
+    const chat = findChat(req.user.id, chatId);
+    if (!chat) {
+        return res.status(404).json({ error: 'Chat not found.' });
+    }
+    if (typeof title === 'string' && title.trim()) {
+        chat.title = title.trim().slice(0, 80);
+        chat.updatedAt = new Date().toISOString();
+    }
+    res.json({ chat });
+});
+
+// --- Chat Completion Route ---
+app.post('/api/chat', authMiddleware, async (req, res) => {
     const userMessage = req.body.message;
-    const sessionId = req.body.sessionId || 'default'; // Use provided sessionId or default
+    const chatId = req.body.chatId;
 
     if (!userMessage) {
         return res.status(400).json({ error: 'Message content is required.' });
     }
+    if (!chatId) {
+        return res.status(400).json({ error: 'chatId is required.' });
+    }
 
     try {
-        // Get or create session history
-        const history = getOrCreateSession(sessionId);
+        const chat = findChat(req.user.id, chatId);
+        if (!chat) {
+            return res.status(404).json({ error: 'Chat not found.' });
+        }
 
         // Build contents array with full conversation history
         const contents = [
-            ...history.map(msg => ({
-                role: msg.role,
+            ...chat.messages.map(msg => ({
+                role: msg.role === 'ai' ? 'model' : 'user',
                 parts: [{ text: msg.text }]
             })),
             {
@@ -94,19 +308,28 @@ app.post('/api/chat', async (req, res) => {
         
         const textResponse = response.text.trim();
 
-        // Store user message and response in history
-        history.push({ role: 'user', text: userMessage });
-        history.push({ role: 'model', text: textResponse });
+        // Derive a simple title from the first user message if chat is still using default title
+        if (chat.title === 'New chat' || !chat.title) {
+            const snippet = userMessage.length > 60 ? `${userMessage.slice(0, 57)}...` : userMessage;
+            chat.title = snippet || 'New chat';
+        }
+
+        // Store user message and response in chat
+        chat.messages.push(
+            { role: 'user', text: userMessage, createdAt: new Date().toISOString() },
+            { role: 'ai', text: textResponse, createdAt: new Date().toISOString() }
+        );
+        chat.updatedAt = new Date().toISOString();
 
         // Keep history to last 20 exchanges (40 messages) to avoid token overflow
-        if (history.length > 40) {
-            history.splice(0, history.length - 40);
+        if (chat.messages.length > 40) {
+            chat.messages.splice(0, chat.messages.length - 40);
         }
 
         // Send the response back to the frontend
         res.json({ 
             response: textResponse,
-            sessionId: sessionId,
+            chatId: chat.id,
             // Placeholder values for future audio/lip-sync integration
             audioUrl: '', 
             visemes: [] 
@@ -116,13 +339,6 @@ app.post('/api/chat', async (req, res) => {
         console.error('Gemini API Error:', error);
         res.status(500).json({ error: 'Failed to communicate with the AI model.' });
     }
-});
-
-// Endpoint to clear chat history for a session
-app.post('/api/chat/clear', (req, res) => {
-    const sessionId = req.body.sessionId || 'default';
-    chatSessions.delete(sessionId);
-    res.json({ message: 'Chat history cleared', sessionId: sessionId });
 });
 
 app.listen(port, () => {
