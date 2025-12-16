@@ -1,82 +1,195 @@
-Cultura Chatbot - Setup & Run
+# Cultura Chatbot - AI Cultural Guide for Karnataka
 
-This repository contains a small client-server project: a React frontend (Vite) and a Node.js backend (Express) with a small Python mock TTS server.
+An interactive voice-enabled chatbot that shares Karnataka's rich cultural heritage using Google Gemini AI and Microsoft Edge TTS for natural Indian English speech synthesis.
 
-These instructions assume you are on Windows and using PowerShell.
+## Features
 
-Prerequisites
-- Node.js (v18+ recommended) and npm
-- Python 3.10+ (for the mock TTS server)
-- Git
+- 🎯 **Culturally-grounded AI**: Powered by Google Gemini with custom prompts for Karnataka heritage
+- 🗣️ **Voice-first experience**: Microsoft Edge TTS with authentic South Indian English voice
+- 👤 **User accounts**: Persistent chat history and personalized profiles
+- 💬 **Multi-chat support**: Create and manage multiple conversation threads
+- ⚡ **Modern stack**: React (Vite), Node.js (Express), Edge TTS
 
-Root repo layout
+## Prerequisites
 
-cultura-chatbot/
-  ├─ backend/        # Node backend and Python TTS mock
-  └─ frontend/       # Vite + React frontend
+- **Node.js** v18+ and npm
+- **Python** 3.10+
+- **Git**
+- **Google Gemini API key** ([Get one here](https://makersuite.google.com/app/apikey))
 
-1) Clone & branch
+## Quick Start
 
-Run these commands to clone and switch to the `alternative` branch:
+### 1. Clone the Repository
 
-git clone https://github.com/<your-user>/saile.git
-cd "c:\Users\saile\Documents\AI projects\cultura-chatbot"
-git checkout alternative
+```powershell
+git clone <your-repo-url>
+cd Cultura-chatbot
+```
 
-2) Backend setup
+### 2. Backend Setup
 
+```powershell
 cd backend
-# Install Node deps
+
+# Install Node.js dependencies
 npm install
 
-# (Optional) Install dev dependency for live reload
-npm install --save-dev nodemon
-
-# Create and activate a Python virtual environment for the TTS mock
+# Create Python virtual environment
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+
+# Install Python dependencies (Flask, Edge TTS)
 pip install -r requirements.txt
 
-# Provide secrets via environment variables (do NOT commit them):
-# Create backend/.env with required keys (example):
-# GEMINI_API_KEY=YOUR_GEMINI_KEY
-# ELEVENLABS_API_KEY=YOUR_ELEVENLABS_KEY
+# Create .env file with your API key
+# Copy .env.example to .env and add your Gemini API key
+```
 
-# Run backend (dev)
-npm run dev    # runs nodemon server.js
+**Create `backend/.env` file:**
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+JWT_SECRET=your_secret_key_for_sessions
+```
 
-3) Python TTS mock
+### 3. Frontend Setup
 
-In a separate terminal, from the `backend` folder after activating the venv:
-
-python tts_server.py
-# The mock TTS server will run at http://127.0.0.1:5000
-
-4) Frontend setup
-
+```powershell
 cd ..\frontend
 npm install
+```
+
+### 4. Running the Application
+
+You need **3 terminals** running simultaneously:
+
+**Terminal 1 - Backend Server:**
+```powershell
+cd backend
 npm run dev
-# The Vite dev server will start (default port 5173) and proxies `/api` to the backend at :3001
+```
+Backend runs on `http://localhost:3001`
 
-5) Development notes & security
+**Terminal 2 - TTS Server:**
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python tts_server.py
+```
+TTS server runs on `http://localhost:5000`
 
-- Remove any API keys accidentally committed. Rotate keys immediately if they were exposed.
-- Use a `.env` file for dev and add it to `.gitignore` (this repo already includes `.gitignore`).
-- For production, use a secrets manager (AWS Secrets Manager / Google Secret Manager / Azure Key Vault).
-- The frontend dev server proxies `/api` to the backend to avoid CORS during development.
+**Terminal 3 - Frontend:**
+```powershell
+cd frontend
+npm run dev
+```
+Frontend runs on `http://localhost:5173`
 
-6) Useful commands
+### 5. Access the Application
 
-- Run backend only: `npm start` (in `backend`)
-- Run backend with live reload: `npm run dev` (requires `nodemon`)
-- Run frontend: `npm run dev` (in `frontend`)
+Open your browser to **http://localhost:5173** and create an account to start chatting!
 
-7) Contributing
+## Project Structure
 
-- Follow ESLint rules in `frontend/eslint.config.js`.
-- Add tests and CI as needed.
+```
+Cultura-chatbot/
+├── backend/
+│   ├── server.js           # Express server with Gemini integration
+│   ├── tts_server.py       # Edge TTS Flask server
+│   ├── requirements.txt    # Python dependencies
+│   ├── package.json        # Node dependencies
+│   └── .env               # Environment variables (create this)
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx        # Main React component
+│   │   └── App.css        # Styling
+│   ├── package.json       # Frontend dependencies
+│   └── vite.config.js     # Vite configuration
+└── README.md
+```
 
-If you want, I can also:
-- Remove the committed `.env` from git history and provide steps to rotate the exposed key (destructive operation).
-- Add a root-level `dev` script to run both frontend and backend concurrently.
+## Voice Configuration
+
+The default voice is **`en-IN-PrabhatNeural`** (South Indian male English) for an authentic Karnataka feel.
+
+To change the voice, set the `EDGE_TTS_VOICE` environment variable:
+
+```powershell
+# In PowerShell (temporary)
+$env:EDGE_TTS_VOICE="en-IN-NeerjaNeural"
+python tts_server.py
+```
+
+**Available Indian English voices:**
+- `en-IN-PrabhatNeural` (Male, South Indian) - Default
+- `en-IN-NeerjaNeural` (Female, Indian)
+
+## Key Features Explained
+
+### 1. Smart Text-to-Speech
+- Automatically removes markdown formatting (*, **, #, etc.)
+- Sanitizes text for natural pronunciation
+- Uses Microsoft Edge TTS (no model downloads needed!)
+
+### 2. Conversation Management
+- Create multiple chat threads
+- Persistent chat history per user
+- Auto-generated chat titles from first message
+
+### 3. React Optimization
+- Fixed useEffect dependency loops for optimal performance
+- Prevents unnecessary API calls
+- Smooth user experience
+
+## Development Notes
+
+### Security
+- **Never commit `.env` files** - They're in `.gitignore`
+- Rotate API keys immediately if exposed
+- Use environment variables for all secrets
+
+### API Rate Limits
+- The system includes automatic retry logic for API overload
+- Gemini API has rate limits - be mindful during testing
+
+### Troubleshooting
+
+**"Model is overloaded" error:**
+- This was fixed! The issue was React useEffect loops, not Google's servers
+- If it persists, wait a few seconds and try again
+
+**TTS server not working:**
+```powershell
+# Make sure virtual environment is activated
+cd backend
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python tts_server.py
+```
+
+**Frontend can't connect to backend:**
+- Check that backend is running on port 3001
+- Check that TTS server is running on port 5000
+- Verify `.env` file has `GEMINI_API_KEY`
+
+## Contributing
+
+1. Follow ESLint rules in `frontend/eslint.config.js`
+2. Test changes thoroughly before committing
+3. Update this README if you add new features
+
+## Tech Stack
+
+- **Frontend**: React, Vite
+- **Backend**: Node.js, Express, Google Gemini SDK
+- **TTS**: Python, Flask, Edge TTS
+- **Auth**: JWT tokens, bcrypt
+
+## License
+
+MIT
+
+## Acknowledgments
+
+- Google Gemini for AI capabilities
+- Microsoft Edge TTS for natural Indian voices
+- The rich cultural heritage of Karnataka 🙏

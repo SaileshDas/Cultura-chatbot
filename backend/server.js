@@ -1,5 +1,5 @@
 // Load environment variables from .env file
-require('dotenv').config(); 
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -80,8 +80,35 @@ Guidelines:
 - Share interesting tidbits naturally, as if you know the place and its people
 - Avoid over-the-top phrases like "magnificent," "glorious," or "breathtaking"—just be real
 - If unsure, say so honestly rather than guessing
+- IMPORTANT: Never use markdown formatting, asterisks, or special symbols in your responses. Speak in plain text only since responses are read aloud by text-to-speech.
 
 Remember: You're not a tourist guide—you're a Kannadiga sharing your heritage.`;
+
+// Helper function to sanitize text for TTS (remove markdown and special characters)
+function sanitizeForTTS(text) {
+    return text
+        // Remove markdown bold/italic
+        .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold** -> bold
+        .replace(/\*([^*]+)\*/g, '$1')      // *italic* -> italic
+        .replace(/__([^_]+)__/g, '$1')      // __bold__ -> bold
+        .replace(/_([^_]+)_/g, '$1')        // _italic_ -> italic
+        // Remove markdown headers
+        .replace(/^#{1,6}\s+/gm, '')        // # Header -> Header
+        // Remove markdown lists
+        .replace(/^[\*\-\+]\s+/gm, '')      // * item -> item
+        .replace(/^\d+\.\s+/gm, '')         // 1. item -> item
+        // Remove code blocks and inline code
+        .replace(/```[\s\S]*?```/g, '')     // ```code``` -> (removed)
+        .replace(/`([^`]+)`/g, '$1')        // `code` -> code
+        // Remove links but keep text
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // [text](url) -> text
+        // Remove other common markdown
+        .replace(/>/g, '')                  // Remove blockquote markers
+        .replace(/~/g, '')                  // Remove strikethrough
+        // Clean up extra whitespace
+        .replace(/\n{3,}/g, '\n\n')         // Multiple newlines -> double newline
+        .trim();
+}
 
 // ---------------------
 
@@ -305,7 +332,7 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
                 systemInstruction: systemInstruction,
             },
         });
-        
+
         const textResponse = response.text.trim();
 
         // Derive a simple title from the first user message if chat is still using default title
@@ -327,12 +354,12 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
         }
 
         // Send the response back to the frontend
-        res.json({ 
+        res.json({
             response: textResponse,
             chatId: chat.id,
             // Placeholder values for future audio/lip-sync integration
-            audioUrl: '', 
-            visemes: [] 
+            audioUrl: '',
+            visemes: []
         });
 
     } catch (error) {

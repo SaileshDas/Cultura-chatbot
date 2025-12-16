@@ -1,58 +1,65 @@
-# Piper TTS Server for Cultura Chatbot
-# Uses Piper TTS as the primary text-to-speech engine
+# Edge TTS Server for Cultura Chatbot
+# Uses Microsoft Edge TTS as the text-to-speech engine
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import edge_tts
+import asyncio
 import base64
-import subprocess
 import os
 import tempfile
-import json
 
 # --- Configuration ---
 app = Flask(__name__)
 CORS(app)
 
-# Piper TTS configuration
-# Default voice model path (user can override via environment variable)
-PIPER_VOICE_PATH = os.environ.get('PIPER_VOICE_PATH', None)
-PIPER_BINARY = os.environ.get('PIPER_BINARY', 'piper')
+# Edge TTS configuration
+# Default voice: Indian English Male (South Indian accent - authentic Karnataka feel)
+DEFAULT_VOICE = os.environ.get('EDGE_TTS_VOICE', 'en-IN-PrabhatNeural')
 
-def generate_audio_with_piper(text, voice_path=None):
+def sanitize_text_for_speech(text):
+    """Remove markdown and special characters that cause bad pronunciation."""
+    import re
+    # Remove markdown formatting
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # **bold**
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # *italic*
+    text = re.sub(r'__([^_]+)__', r'\1', text)  # __bold__
+    text = re.sub(r'_([^_]+)_', r'\1', text)  # _italic_
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # `code`
+    # Remove list markers
+    text = re.sub(r'^[\*\-\+]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)
+    # Remove headers
+    text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)
+    # Clean extra whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+# Alternative voices you can use:
+# - 'en-IN-PrabhatNeural' (Male, Indian English) - Default, authentic Karnataka feel
+# - 'en-IN-NeerjaNeural' (Female, Indian English)
+# - 'en-US-AriaNeural' (Female, US English)
+# - 'en-GB-SoniaNeural' (Female, British English)
+
+async def generate_audio_with_edge_tts(text, voice=None):
     """
-    Generate audio using Piper TTS.
-    Falls back to a mock response if Piper is not available.
+    Generate audio using Edge TTS.
+    Returns base64-encoded audio data or None on failure.
     """
     try:
-        # If no voice path is specified, try to use a default or fallback
-        if not voice_path:
-            voice_path = PIPER_VOICE_PATH
-        
-        # If Piper is not configured, return None to trigger fallback
-        if not voice_path or not os.path.exists(voice_path):
-            print("Warning: Piper voice model not found. Falling back to browser TTS.")
-            return None
+        if not voice:
+            voice = DEFAULT_VOICE
         
         # Create a temporary file for output
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_file:
             output_path = tmp_file.name
         
         try:
-            # Run Piper TTS
-            # Piper command: echo "text" | piper --model voice.onnx --output_file output.wav
-            process = subprocess.Popen(
-                [PIPER_BINARY, '--model', voice_path, '--output_file', output_path],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            # Create Edge TTS communicator
+            communicate = edge_tts.Communicate(text, voice)
             
-            stdout, stderr = process.communicate(input=text, timeout=30)
-            
-            if process.returncode != 0:
-                print(f"Piper TTS error: {stderr}")
-                return None
+            # Save audio to file
+            await communicate.save(output_path)
             
             # Read the generated audio file
             with open(output_path, 'rb') as f:
@@ -68,20 +75,14 @@ def generate_audio_with_piper(text, voice_path=None):
             if os.path.exists(output_path):
                 os.unlink(output_path)
                 
-    except subprocess.TimeoutExpired:
-        print("Piper TTS timeout")
-        return None
-    except FileNotFoundError:
-        print("Piper binary not found. Please install Piper TTS.")
-        return None
     except Exception as e:
-        print(f"Error generating audio with Piper: {e}")
+        print(f"Error generating audio with Edge TTS: {e}")
         return None
 
 @app.route('/api/generate-tts', methods=['POST'])
 def generate_tts():
     """
-    Handles TTS requests using Piper TTS.
+    Handles TTS requests using Edge TTS.
     Returns audio in base64 format or indicates fallback needed.
     """
     try:
@@ -90,26 +91,37 @@ def generate_tts():
             return jsonify({"error": "Missing 'text' field in request body"}), 400
 
         text_prompt = data['text']
-        voice_id = data.get('voice_id', 'default')
+        voice_id = data.get('voice_id', DEFAULT_VOICE)
 
-        print(f"Received TTS request for voice '{voice_id}': '{text_prompt[:50]}...'")
+        # Sanitize text to remove markdown and special characters
+        clean_text = sanitize_text_for_speech(text_prompt)
+
+        print(f"Received TTS request for voice '{voice_id}': '{clean_text[:50]}...'")
         
-        # Try to generate audio with Piper
-        audio_base64 = generate_audio_with_piper(text_prompt, PIPER_VOICE_PATH)
+        # Generate audio with Edge TTS (run async function in sync context)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            audio_base64 = loop.run_until_complete(
+                generate_audio_with_edge_tts(clean_text, voice_id)
+            )
+        finally:
+            loop.close()
         
         if audio_base64:
-            # Success - return Piper-generated audio
+            # Success - return Edge TTS-generated audio
             return jsonify({
                 "status": "success",
                 "audio_base64": audio_base64,
-                "mime_type": "audio/wav",
-                "engine": "piper"
+                "mime_type": "audio/mp3",
+                "engine": "edge-tts",
+                "voice": voice_id
             }), 200
         else:
-            # Piper not available - indicate fallback needed
+            # Edge TTS failed - indicate fallback needed
             return jsonify({
                 "status": "fallback",
-                "message": "Piper TTS not available. Use browser TTS.",
+                "message": "Edge TTS not available. Use browser TTS.",
                 "engine": "browser"
             }), 200
 
@@ -122,20 +134,37 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         "status": "ok",
-        "piper_configured": PIPER_VOICE_PATH is not None and os.path.exists(PIPER_VOICE_PATH) if PIPER_VOICE_PATH else False
+        "engine": "edge-tts",
+        "default_voice": DEFAULT_VOICE,
+        "available": True
     }), 200
 
+@app.route('/api/voices', methods=['GET'])
+def list_voices():
+    """List available Edge TTS voices"""
+    # Common voices for reference
+    voices = [
+        {"id": "en-IN-NeerjaNeural", "name": "Neerja", "language": "Indian English", "gender": "Female"},
+        {"id": "en-IN-PrabhatNeural", "name": "Prabhat", "language": "Indian English", "gender": "Male"},
+        {"id": "en-US-AriaNeural", "name": "Aria", "language": "US English", "gender": "Female"},
+        {"id": "en-US-GuyNeural", "name": "Guy", "language": "US English", "gender": "Male"},
+        {"id": "en-GB-SoniaNeural", "name": "Sonia", "language": "British English", "gender": "Female"},
+        {"id": "en-GB-RyanNeural", "name": "Ryan", "language": "British English", "gender": "Male"},
+    ]
+    return jsonify({"voices": voices}), 200
+
 if __name__ == '__main__':
-    print("Starting Piper TTS Server on http://127.0.0.1:5000")
-    print("Note: If Piper is not configured, the server will indicate fallback to browser TTS.")
+    print("Starting Edge TTS Server on http://127.0.0.1:5000")
+    print(f"Using default voice: {DEFAULT_VOICE}")
+    print("Edge TTS provides high-quality Microsoft voices without model downloads.")
     app.run(debug=True, port=5000)
 
-# NOTE TO USER: 
-# To use Piper TTS:
-# 1. Install Piper TTS: https://github.com/rhasspy/piper
-# 2. Download a voice model (e.g., from https://huggingface.co/rhasspy/piper-voices)
-# 3. Set environment variable: export PIPER_VOICE_PATH=/path/to/voice.onnx
-# 4. Or set PIPER_BINARY if piper is not in PATH
-# 
-# To run: pip install Flask Flask-CORS
-# Then: python backend/tts_server.py
+# NOTE TO USER:
+# Edge TTS uses Microsoft's online text-to-speech service.
+# No installation or model downloads required!
+#
+# To change the voice, set the EDGE_TTS_VOICE environment variable:
+# export EDGE_TTS_VOICE=en-IN-PrabhatNeural  (for male Indian English voice)
+#
+# To run: pip install -r requirements.txt
+# Then: python tts_server.py

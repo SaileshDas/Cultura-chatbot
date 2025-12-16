@@ -1,11 +1,11 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'; 
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import './App.css';
 
 
 function App() {
 	// --- AUTH & CHAT STATE ---
 	const [inputMessage, setInputMessage] = useState('');
-	const [isTalking, setIsTalking] = useState(false); 
+	const [isTalking, setIsTalking] = useState(false);
 	const [chatHistory, setChatHistory] = useState([]);
 	const [authToken, setAuthToken] = useState(null);
 	const [currentUser, setCurrentUser] = useState(null);
@@ -36,45 +36,45 @@ function App() {
 		"What's the story behind the Nandi Bull statue?",
 		"Explain the Yakshagana theatrical tradition.",
 		"What legends surround the Chamundeshwari temple?",
-		
+
 		// Heritage & Architecture
 		"What are the must-visit heritage sites in Hampi?",
 		"How did the Vijayanagara empire influence art here?",
 		"Describe the unique architecture of Belur temples.",
 		"What makes Halebidu a masterpiece of Hoysala art?",
 		"Tell me about the Tipu Sultan's palaces.",
-		
+
 		// Cuisine & Food
 		"Describe the flavours of a classic Udupi meal.",
 		"What makes Coorg coffee special?",
 		"Explain the significance of dosa in Karnataka cuisine.",
 		"What are the traditional spices used in Coorgi cooking?",
 		"Describe a traditional Kannadiga breakfast.",
-		
+
 		// Arts & Crafts
 		"What is the significance of Mysore silk?",
 		"Tell me about traditional Sandalwood carving.",
 		"Explain the Bidriware metalwork tradition.",
 		"What makes Chitradurga stone carvings unique?",
-		
+
 		// Festivals & Celebrations
 		"What's the cultural importance of Ugadi festival?",
 		"Explain the traditions of Dasara in Karnataka.",
 		"Tell me about the Veerashaiva philosophy.",
 		"What role do marigolds play in Karnataka festivals?",
-		
+
 		// Nature & Geography
 		"What makes the Western Ghats of Karnataka special?",
 		"Tell me about the coffee plantations of Coorg.",
 		"Describe the biodiversity of Kodagu district.",
 		"What's unique about Karnataka's beaches?",
-		
+
 		// Famous Personalities
 		"Tell me about the life of Tipu Sultan.",
 		"Who was Krishnaraja Wadiyar and his contributions?",
 		"Explain the legacy of poet Purandara Dasa.",
 		"What did Saint Basaveshwara preach?",
-		
+
 		// Languages & Literature
 		"What's the richness of the Kannada language?",
 		"Tell me about famous Kannada literature.",
@@ -121,36 +121,36 @@ function App() {
 		if ('speechSynthesis' in window) {
 			// Clear any currently speaking utterances before starting a new one
 			window.speechSynthesis.cancel();
-			
+
 			const utterance = new SpeechSynthesisUtterance(text);
-			
+
 			utterance.onstart = () => setIsTalking(true);
 			utterance.onend = () => setIsTalking(false);
-			
+
 			// --- VOICE SELECTION AND MONOTONY FIX ---
 			const voices = window.speechSynthesis.getVoices();
-			
+
 			// 1. Prioritize a Female Indian English Voice
 			const preferredVoice = voices.find(
-				voice => 
-				voice.lang.includes('en-IN') && 
-				(voice.name.includes('Female') || voice.name.includes('Feminine') || voice.name.includes('Google') || !voice.name.includes('Male'))
+				voice =>
+					voice.lang.includes('en-IN') &&
+					(voice.name.includes('Female') || voice.name.includes('Feminine') || voice.name.includes('Google') || !voice.name.includes('Male'))
 			);
-			
+
 			// 2. Fallback to any generic female voice
 			const femaleFallback = voices.find(
-				voice => 
-				!voice.name.includes('Male') && 
-				(voice.name.includes('Female') || voice.name.includes('Feminine') || voice.name.includes('Google'))
+				voice =>
+					!voice.name.includes('Male') &&
+					(voice.name.includes('Female') || voice.name.includes('Feminine') || voice.name.includes('Google'))
 			);
-			
+
 			// Set the chosen voice
 			if (preferredVoice) {
 				utterance.voice = preferredVoice;
 			} else if (femaleFallback) {
 				utterance.voice = femaleFallback;
 			}
-			
+
 			// 3. Adjust Pitch (to sound more lively) and Rate (to sound less monotonous)
 			utterance.pitch = 1.1; // Slightly higher pitch
 			utterance.rate = 1.1;  // Slightly faster rate
@@ -235,7 +235,7 @@ function App() {
 			speakWithBrowserTTS(text);
 		}
 	}, [speakWithBrowserTTS]);
-	
+
 	// --- AUTH HELPERS ---
 	const saveAuth = (token, user) => {
 		setAuthToken(token);
@@ -284,17 +284,24 @@ function App() {
 			if (!res.ok) throw new Error('Failed to load chats');
 			const data = await res.json();
 			setChats(data.chats || []);
-			if (!activeChatId && data.chats && data.chats.length > 0) {
-				setActiveChatId(data.chats[0].id);
-			}
+			// Only set activeChatId once on initial load, not on every fetch
+			setActiveChatId(current => {
+				if (!current && data.chats && data.chats.length > 0) {
+					return data.chats[0].id;
+				}
+				return current;
+			});
 		} catch (err) {
 			console.error(err);
 		}
-	}, [API_BASE, authToken, activeChatId]);
+	}, [API_BASE, authToken]);
 
+	// Fetch chats only when auth token changes (on login)
 	useEffect(() => {
-		fetchChats();
-	}, [fetchChats]);
+		if (authToken) {
+			fetchChats();
+		}
+	}, [authToken, fetchChats]);
 
 	const loadChatMessages = useCallback(
 		async (chatId) => {
@@ -313,9 +320,12 @@ function App() {
 		[API_BASE, authToken]
 	);
 
+	// Load messages only when activeChatId changes, not on every render
 	useEffect(() => {
-		loadChatMessages(activeChatId);
-	}, [activeChatId, loadChatMessages]);
+		if (activeChatId) {
+			loadChatMessages(activeChatId);
+		}
+	}, [activeChatId]);
 
 	const handleAuthSubmit = async (e) => {
 		e.preventDefault();
@@ -379,12 +389,12 @@ function App() {
 
 	// --- CHAT SUBMIT FUNCTION: Sends message to Backend and triggers TTS ---
 	const handleSubmit = async (e) => {
-		e.preventDefault(); 
+		e.preventDefault();
 
 		if (!inputMessage.trim() || isTalking || !authToken || !activeChatId) return;
-		setIsTalking(true); 
+		setIsTalking(true);
 		const userMessage = inputMessage;
-		setInputMessage(''); 
+		setInputMessage('');
 
 		// Add user message to chat history immediately
 		setChatHistory(prev => [...prev, { role: 'user', text: userMessage }]);
@@ -396,7 +406,7 @@ function App() {
 			const response = await fetch(`${API_BASE}/api/chat`, {
 				method: 'POST',
 				headers: authHeaders,
-				body: JSON.stringify({ 
+				body: JSON.stringify({
 					message: userMessage,
 					chatId: activeChatId,
 				}),
@@ -410,22 +420,22 @@ function App() {
 
 			const data = await response.json();
 			const chatbotResponseText = data.response || "I could not find a text response.";
-			
+
 			// Add AI response to chat history
 			setChatHistory(prev => [...prev, { role: 'ai', text: chatbotResponseText }]);
 			// Refresh chat list metadata (e.g., updated timestamps)
 			fetchChats();
-			
+
 			console.log('Chatbot Text Response:', chatbotResponseText);
-			
+
 			// 2. Use the NATIVE BROWSER TTS function to speak the response
-			speak(chatbotResponseText); 
+			speak(chatbotResponseText);
 
 		} catch (error) {
 			console.error('Error in chat process:', error);
 			// Stop talking/loading state on error
-			setIsTalking(false); 
-		} 
+			setIsTalking(false);
+		}
 	};
 
 	const handleSuggestion = (prompt) => {
@@ -550,267 +560,267 @@ function App() {
 
 			{currentUser && view === 'chat' && (
 				<div className="content-grid">
-				<section className="immersive-panel">
-					<header className="section-header">
-						<p className="eyebrow">Immersive culture intelligence</p>
-						<div className={`status-chip ${isTalking ? 'active' : ''}`}>
-							<span className="pulse-dot"></span>
-							{isTalking ? 'Narrating live' : 'Standing by'}
-						</div>
-					</header>
+					<section className="immersive-panel">
+						<header className="section-header">
+							<p className="eyebrow">Immersive culture intelligence</p>
+							<div className={`status-chip ${isTalking ? 'active' : ''}`}>
+								<span className="pulse-dot"></span>
+								{isTalking ? 'Narrating live' : 'Standing by'}
+							</div>
+						</header>
 
-					<div className="hero-grid no-3d">
-						<div className="hero-copy">
-							<h1>Step into a living archive of Karnataka.</h1>
-							<p>
-								Wander through dynasties, craftsmanship, festivals, and hidden trails with a culturally grounded
-								AI guide that narrates each answer in real time.
-							</p>
-							<div className="hero-actions">
-								<button type="button" className="primary-cta" onClick={focusInputField}>
-									Start asking
-								</button>
-								<button type="button" className="ghost-cta" onClick={inspirePrompt}>
-									Surprise me
-								</button>
-							</div>
-						</div>
-						<div className="hero-tiles">
-							<div className="tile">
-								<p>Stories exchanged</p>
-								<strong>{totalTurns}</strong>
-							</div>
-							<div className="tile">
-								<p>Insights narrated</p>
-								<strong>{aiTurns}</strong>
-							</div>
-							<div className="tile highlight">
-								<p>Signed in</p>
-								<strong>{currentUser ? 'Yes' : 'No'}</strong>
-							</div>
-						</div>
-					</div>
-				</section>
-
-				<section className="chat-panel">
-					<div className="panel-header">
-						<div>
-							<p className="eyebrow">Conversational studio</p>
-							<h3>Ask Cultura anything</h3>
-							<p className="subtitle">
-								Try guided prompts or freestyle curiosities. Cultura replies with layered insights and narration.
-							</p>
-						</div>
-						<div className="header-badges">
-							<span className="badge">Voice {isTalking ? 'live' : 'standby'}</span>
-							<span className="badge subtle">{chatHistory.length ? 'Session in progress' : 'Fresh session'}</span>
-						</div>
-					</div>
-
-					{currentUser && (
-						<div className="chat-toolbar">
-							<div>
-								{chats.length === 0 ? (
-									<span className="badge subtle">No chats yet</span>
-								) : (
-									<select
-										className="chat-history-select"
-										value={activeChatId || ''}
-										onChange={(e) => setActiveChatId(e.target.value || null)}
-									>
-										{chats.map((chat) => (
-											<option key={chat.id} value={chat.id}>
-												{chat.title || 'Untitled chat'}
-											</option>
-										))}
-									</select>
-								)}
-							</div>
-							<div className="chat-toolbar-actions">
-								<button
-									type="button"
-									className="nav-pill"
-									onClick={async () => {
-										if (!authToken) return;
-										try {
-											const res = await fetch(`${API_BASE}/api/chats`, {
-												method: 'POST',
-												headers: authHeaders,
-												body: JSON.stringify({ title: 'New chat' }),
-											});
-											const data = await res.json();
-											if (res.ok && data.chat) {
-												setChats((prev) => [data.chat, ...prev]);
-												setActiveChatId(data.chat.id);
-												setChatHistory([]);
-											}
-										} catch (err) {
-											console.error('Failed to create chat', err);
-										}
-									}}
-								>
-									New chat
-								</button>
-								<button
-									type="button"
-									className="nav-pill ghost"
-									disabled={!activeChatId}
-									onClick={async () => {
-										if (!authToken || !activeChatId) return;
-										const confirmDelete = window.confirm('Delete this chat permanently?');
-										if (!confirmDelete) return;
-										try {
-											const res = await fetch(`${API_BASE}/api/chats/${activeChatId}`, {
-												method: 'DELETE',
-												headers: authHeaders,
-											});
-											if (res.ok) {
-												setChats((prev) => prev.filter((c) => c.id !== activeChatId));
-												setActiveChatId((prev) => {
-													const remaining = chats.filter((c) => c.id !== prev);
-													return remaining[0]?.id || null;
-												});
-												setChatHistory([]);
-											}
-										} catch (err) {
-											console.error('Failed to delete chat', err);
-										}
-									}}
-								>
-									Delete chat
-								</button>
-								<button
-									type="button"
-									className="nav-pill ghost"
-									onClick={handleStopSpeaking}
-									disabled={!isTalking}
-								>
-									Stop voice
-								</button>
-							</div>
-						</div>
-					)}
-
-					<div className="prompt-dropdown-container" ref={dropdownRef}>
-						<button 
-							className="prompt-dropdown-toggle"
-							onClick={() => setShowPromptDropdown(!showPromptDropdown)}
-							disabled={isTalking}
-						>
-							<span>💡 Surprise me with a prompt</span>
-							<svg 
-								className={`dropdown-arrow ${showPromptDropdown ? 'open' : ''}`}
-								width="16" 
-								height="16" 
-								viewBox="0 0 24 24" 
-								fill="none" 
-								xmlns="http://www.w3.org/2000/svg"
-							>
-								<path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-							</svg>
-						</button>
-						{showPromptDropdown && (
-							<div className="prompt-dropdown-menu">
-								{suggestedPrompts.map((prompt) => (
-									<button 
-										type="button" 
-										key={prompt} 
-										className="prompt-dropdown-item"
-										onClick={() => {
-											handleSuggestion(prompt);
-											setShowPromptDropdown(false);
-										}}
-										disabled={isTalking}
-									>
-										{prompt}
+						<div className="hero-grid no-3d">
+							<div className="hero-copy">
+								<h1>Step into a living archive of Karnataka.</h1>
+								<p>
+									Wander through dynasties, craftsmanship, festivals, and hidden trails with a culturally grounded
+									AI guide that narrates each answer in real time.
+								</p>
+								<div className="hero-actions">
+									<button type="button" className="primary-cta" onClick={focusInputField}>
+										Start asking
 									</button>
-								))}
+									<button type="button" className="ghost-cta" onClick={inspirePrompt}>
+										Surprise me
+									</button>
+								</div>
+							</div>
+							<div className="hero-tiles">
+								<div className="tile">
+									<p>Stories exchanged</p>
+									<strong>{totalTurns}</strong>
+								</div>
+								<div className="tile">
+									<p>Insights narrated</p>
+									<strong>{aiTurns}</strong>
+								</div>
+								<div className="tile highlight">
+									<p>Signed in</p>
+									<strong>{currentUser ? 'Yes' : 'No'}</strong>
+								</div>
+							</div>
+						</div>
+					</section>
+
+					<section className="chat-panel">
+						<div className="panel-header">
+							<div>
+								<p className="eyebrow">Conversational studio</p>
+								<h3>Ask Cultura anything</h3>
+								<p className="subtitle">
+									Try guided prompts or freestyle curiosities. Cultura replies with layered insights and narration.
+								</p>
+							</div>
+							<div className="header-badges">
+								<span className="badge">Voice {isTalking ? 'live' : 'standby'}</span>
+								<span className="badge subtle">{chatHistory.length ? 'Session in progress' : 'Fresh session'}</span>
+							</div>
+						</div>
+
+						{currentUser && (
+							<div className="chat-toolbar">
+								<div>
+									{chats.length === 0 ? (
+										<span className="badge subtle">No chats yet</span>
+									) : (
+										<select
+											className="chat-history-select"
+											value={activeChatId || ''}
+											onChange={(e) => setActiveChatId(e.target.value || null)}
+										>
+											{chats.map((chat) => (
+												<option key={chat.id} value={chat.id}>
+													{chat.title || 'Untitled chat'}
+												</option>
+											))}
+										</select>
+									)}
+								</div>
+								<div className="chat-toolbar-actions">
+									<button
+										type="button"
+										className="nav-pill"
+										onClick={async () => {
+											if (!authToken) return;
+											try {
+												const res = await fetch(`${API_BASE}/api/chats`, {
+													method: 'POST',
+													headers: authHeaders,
+													body: JSON.stringify({ title: 'New chat' }),
+												});
+												const data = await res.json();
+												if (res.ok && data.chat) {
+													setChats((prev) => [data.chat, ...prev]);
+													setActiveChatId(data.chat.id);
+													setChatHistory([]);
+												}
+											} catch (err) {
+												console.error('Failed to create chat', err);
+											}
+										}}
+									>
+										New chat
+									</button>
+									<button
+										type="button"
+										className="nav-pill ghost"
+										disabled={!activeChatId}
+										onClick={async () => {
+											if (!authToken || !activeChatId) return;
+											const confirmDelete = window.confirm('Delete this chat permanently?');
+											if (!confirmDelete) return;
+											try {
+												const res = await fetch(`${API_BASE}/api/chats/${activeChatId}`, {
+													method: 'DELETE',
+													headers: authHeaders,
+												});
+												if (res.ok) {
+													setChats((prev) => prev.filter((c) => c.id !== activeChatId));
+													setActiveChatId((prev) => {
+														const remaining = chats.filter((c) => c.id !== prev);
+														return remaining[0]?.id || null;
+													});
+													setChatHistory([]);
+												}
+											} catch (err) {
+												console.error('Failed to delete chat', err);
+											}
+										}}
+									>
+										Delete chat
+									</button>
+									<button
+										type="button"
+										className="nav-pill ghost"
+										onClick={handleStopSpeaking}
+										disabled={!isTalking}
+									>
+										Stop voice
+									</button>
+								</div>
 							</div>
 						)}
-					</div>
 
-					<div className="chat-card">
-						<div className="chat-history">
-							{chatHistory.length === 0 ? (
-								<div className="chat-history-empty">
-									<strong>Welcome to Cultura</strong>
-									<p>
-										{currentUser
-											? 'Create a chat and ask about art, dynasties, craftsmanship, cuisine, festivals, or hidden routes across Karnataka.'
-											: 'Log in or create an account to start storing your chats locally.'}
-									</p>
-								</div>
-							) : (
-								chatHistory.map((msg, idx) => (
-									<div key={idx} className={`message-bubble ${msg.role}`}>
-										<div className="message-content">
-											{msg.text}
-										</div>
-									</div>
-								))
-							)}
-							{isTalking && (
-								<div className="message-bubble ai">
-									<div className="message-content">
-										<div className="typing-indicator">
-											<div className="typing-dot"></div>
-											<div className="typing-dot"></div>
-											<div className="typing-dot"></div>
-										</div>
-									</div>
-								</div>
-							)}
-							<div ref={chatHistoryEndRef} />
-						</div>
-
-						<div className="chat-input-area">
-							<form onSubmit={handleSubmit} className="chat-form">
-								<input 
-									ref={inputRef}
-									type="text" 
-									className="chat-input"
-									placeholder={
-										!currentUser
-											? 'Log in to start chatting'
-											: !activeChatId
-											? 'Create a new chat to begin'
-											: isTalking
-											? 'Cultura is speaking...'
-											: 'Type your next curiosity'
-									}
-									value={inputMessage} 
-									onChange={(e) => setInputMessage(e.target.value)}
-									disabled={
-										isTalking || !currentUser || !activeChatId
-									}
-								/>
-								<button
-									type="submit"
-									className="send-button"
-									disabled={
-										isTalking || !inputMessage.trim() || !currentUser || !activeChatId
-									}
-									aria-label="Send message"
+						<div className="prompt-dropdown-container" ref={dropdownRef}>
+							<button
+								className="prompt-dropdown-toggle"
+								onClick={() => setShowPromptDropdown(!showPromptDropdown)}
+								disabled={isTalking}
+							>
+								<span>💡 Surprise me with a prompt</span>
+								<svg
+									className={`dropdown-arrow ${showPromptDropdown ? 'open' : ''}`}
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									xmlns="http://www.w3.org/2000/svg"
 								>
-									{isTalking ? (
-										<div className="loading-dots">
-											<div className="loading-dot"></div>
-											<div className="loading-dot"></div>
-											<div className="loading-dot"></div>
-										</div>
-									) : (
-										<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-											<path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-											<path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-										</svg>
-									)}
-								</button>
-							</form>
-							<p className="input-hint">Press Enter to send • Cultura narrates each reply aloud</p>
+									<path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+								</svg>
+							</button>
+							{showPromptDropdown && (
+								<div className="prompt-dropdown-menu">
+									{suggestedPrompts.map((prompt) => (
+										<button
+											type="button"
+											key={prompt}
+											className="prompt-dropdown-item"
+											onClick={() => {
+												handleSuggestion(prompt);
+												setShowPromptDropdown(false);
+											}}
+											disabled={isTalking}
+										>
+											{prompt}
+										</button>
+									))}
+								</div>
+							)}
 						</div>
-					</div>
-				</section>
-			</div>
+
+						<div className="chat-card">
+							<div className="chat-history">
+								{chatHistory.length === 0 ? (
+									<div className="chat-history-empty">
+										<strong>Welcome to Cultura</strong>
+										<p>
+											{currentUser
+												? 'Create a chat and ask about art, dynasties, craftsmanship, cuisine, festivals, or hidden routes across Karnataka.'
+												: 'Log in or create an account to start storing your chats locally.'}
+										</p>
+									</div>
+								) : (
+									chatHistory.map((msg, idx) => (
+										<div key={idx} className={`message-bubble ${msg.role}`}>
+											<div className="message-content">
+												{msg.text}
+											</div>
+										</div>
+									))
+								)}
+								{isTalking && (
+									<div className="message-bubble ai">
+										<div className="message-content">
+											<div className="typing-indicator">
+												<div className="typing-dot"></div>
+												<div className="typing-dot"></div>
+												<div className="typing-dot"></div>
+											</div>
+										</div>
+									</div>
+								)}
+								<div ref={chatHistoryEndRef} />
+							</div>
+
+							<div className="chat-input-area">
+								<form onSubmit={handleSubmit} className="chat-form">
+									<input
+										ref={inputRef}
+										type="text"
+										className="chat-input"
+										placeholder={
+											!currentUser
+												? 'Log in to start chatting'
+												: !activeChatId
+													? 'Create a new chat to begin'
+													: isTalking
+														? 'Cultura is speaking...'
+														: 'Type your next curiosity'
+										}
+										value={inputMessage}
+										onChange={(e) => setInputMessage(e.target.value)}
+										disabled={
+											isTalking || !currentUser || !activeChatId
+										}
+									/>
+									<button
+										type="submit"
+										className="send-button"
+										disabled={
+											isTalking || !inputMessage.trim() || !currentUser || !activeChatId
+										}
+										aria-label="Send message"
+									>
+										{isTalking ? (
+											<div className="loading-dots">
+												<div className="loading-dot"></div>
+												<div className="loading-dot"></div>
+												<div className="loading-dot"></div>
+											</div>
+										) : (
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+												<path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+												<path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+											</svg>
+										)}
+									</button>
+								</form>
+								<p className="input-hint">Press Enter to send • Cultura narrates each reply aloud</p>
+							</div>
+						</div>
+					</section>
+				</div>
 			)}
 
 			{currentUser && view === 'profile' && (
