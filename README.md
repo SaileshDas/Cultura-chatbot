@@ -1,150 +1,113 @@
-# Cultura Chatbot - AI Cultural Guide for Karnataka
+# Cultura Chatbot - AI Cultural Guide & Travel Buddy for Karnataka
 
-An interactive voice-enabled chatbot that shares Karnataka's rich cultural heritage using Google Gemini AI and Microsoft Edge TTS for natural Indian English speech synthesis. It now features a dedicated **Travel Planner Mode** for personalized itineraries.
+An interactive, voice-enabled AI companion designed to share the rich cultural heritage and hidden gems of Karnataka. Powered by Google Gemini, grounded in custom knowledge through RAG, and featuring high-quality Microsoft Edge TTS with authentic South Indian English speech.
 
-## Features
+---
 
-- 🎯 **Dual Modes**: 
-  - **Cultural Guide**: Expert on history, art, and custom traditions.
-  - **Travel Planner**: Creates structured, personalized day-by-day itineraries.
-- 🧠 **RAG (Retrieval Augmented Generation)**: Grounded responses using a custom knowledge base for accurate facts.
-- 🗣️ **Smart Voice**: 
-  - Authentic South Indian English accent (Edge TTS).
-  - **Dynamic Speed**: Automatically adjusts speaking rate for long responses (up to +25% faster) for a snappy experience.
-  - **Sanitized Output**: Reads natural language only, skipping markdown formatting like tables and special characters.
-- � **Interactive UI**:
-  - **Rich Markdown**: Renders tables for itineraries and formatted text.
-  - **Checklists**: Interactive checkboxes for travel tasks directly in the chat.
-- 👤 **User Accounts**: Persistent chat history and detailed traveler profiles.
+## 🌟 Key Features
 
-## Prerequisites
+### 🎯 Intelligence & Dual Modes
+- **Cultural Guide**: Expert on Karnataka's history, folklore, art, and custom traditions.
+- **Travel Planner**: Creates structured, personalized day-by-day itineraries based on your budget, interests, and style.
+- **RAG (Retrieval Augmented Generation)**: Responses are grounded in a local knowledge base (`backend/data/travel_data.json`) for pinpoint accuracy.
 
-- **Node.js** v18+ and npm
-- **Python** 3.10+
-- **Git**
-- **Google Gemini API key** ([Get one here](https://makersuite.google.com/app/apikey))
+### 🎤 Interactive Voice & UI
+- **Voice Input (STT)**: 
+  - **Whisper AI**: Highly accurate speech-to-text supporting multiple languages (including Kannada).
+  - **Web Speech Fallback**: Instant browser-based recognition if the backend server is unavailable.
+- **Smart Narration (TTS)**: 
+  - Authentic South Indian English accent (`en-IN-PrabhatNeural`).
+  - **Dynamic Speed**: Automatically adjusts speaking rate for long responses (up to +25% faster) for a better conversational flow.
+  - **Sanitized Audio**: Reads contextually, automatically skipping markdown clutter and table markup.
+- **Modern UI**:
+  - **Tabular Itineraries**: View your travel plans in clean, readable Markdown tables.
+  - **Interactive Checklists**: Tick off travel tasks directly in your chat bubbles.
+  - **Glassmorphism Design**: A premium, responsive localized interface.
 
-## Quick Start
+---
 
-### 1. Clone the Repository
+## 🚀 Quick Start
 
+### 1. Prerequisites
+- **Node.js** v18+
+- **Python 3.11 or 3.12** (Crucial for Whisper STT compatibility)
+- **Google Gemini API Key** ([Get one here](https://makersuite.google.com/app/apikey))
+
+### 2. Setup
+
+#### Clone & Install
 ```powershell
 git clone <your-repo-url>
 cd Cultura-chatbot
-```
 
-### 2. Backend Setup
-
-```powershell
-cd backend
-
-# Install Node.js dependencies
+# Install Frontend
+cd frontend
 npm install
 
-# Create .env file
-# Copy .env.example to .env and add your GEMINI_API_KEY
+# Install Backend
+cd ../backend
+npm install
 ```
 
-**Create `backend/.env` file:**
+#### Environment Configuration
+Create a `.env` file in the `backend/` directory:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 JWT_SECRET=your_secret_key_for_sessions
 ```
 
-### 3. TTS Server Setup (Python)
-
-This project uses a lightweight Python server for high-quality text-to-speech.
-
+#### TTS & STT Server (Python)
+We recommend using a virtual environment with Python 3.12:
 ```powershell
 cd backend
-
-# Create virtual environment (Recommended)
-python -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-
-# Install dependencies
-pip install flask flask-cors edge-tts
-# OR
-pip install -r requirements.txt
+pip install flask flask-cors edge-tts faster-whisper
 ```
 
-### 4. Frontend Setup
+---
 
-```powershell
-cd ../frontend
-npm install
-```
+## 🛠️ Running the Application
 
-### 5. Running the Application
+To fully experience Cultura, you need three servers running:
 
-You need **3 terminals** running simultaneously to fully experience the app:
+1. **Backend Server** (Node.js):
+   ```powershell
+   cd backend
+   node server.js
+   ```
+2. **AI Voice Server** (Python):
+   ```powershell
+   cd backend
+   .\.venv\Scripts\Activate.ps1
+   python tts_server.py
+   ```
+3. **Frontend App** (Vite):
+   ```powershell
+   cd frontend
+   npm run dev
+   ```
 
-**Terminal 1 - Backend Server:**
-```powershell
-cd backend
-node server.js
-```
-Runs on `http://localhost:3001`
+Open **http://localhost:5173** to start your journey!
 
-**Terminal 2 - TTS Server:**
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-python tts_server.py
-```
-Runs on `http://localhost:5000`
+---
 
-**Terminal 3 - Frontend:**
-```powershell
-cd frontend
-npm run dev
-```
-Runs on `http://localhost:5173`
+## 💡 Usage Tips
 
-### 6. Access the Application
+- **Traveler Profile**: Set your budget and interests in the **Profile** section before using the Travel Planner for better recommendations.
+- **Voice Input**: Click the 🎤 icon. If it's your first time, Whisper will download its model (~500MB). If the backend is off, it will automatically fallback to your browser's built-in speech recognition.
+- **RAG Check**: Ask "What is the secret code of the lost temple?" to see the RAG system retrieve data from the local JSON files.
 
-Open **http://localhost:5173** in your browser.
+---
 
-## How to Use
+## 📂 Project Structure
 
-### Travel Planner Mode
-1.  Log in and go to your **Profile**.
-2.  Set your preferences (e.g., "Temples", "Low Budget").
-3.  Go to Chat, select **Travel Planner**.
-4.  Ask: "Plan a 2-day trip to Hampi".
-5.  View the **Table** itinerary and tick off items in the **Checklist**!
+- `backend/server.js`: Main API and Gemini RAG integration.
+- `backend/tts_server.py`: Python server handling Edge TTS and Whisper STT.
+- `backend/rag.js`: Lightweight vector-similarity engine.
+- `frontend/src/App.jsx`: State-of-the-art React interface.
 
-### Testing RAG (Secret Feature)
-- Ask: "What is the secret code of the lost temple?"
-- Answer: The bot retrieves this secret from the local knowledge base (`backend/data/travel_data.json`).
+---
 
-## Project Structure
-
-```
-Cultura-chatbot/
-├── backend/
-│   ├── server.js           # Express server + Gemini + RAG Logic
-│   ├── rag.js              # Retrieval Augmented Generation System
-│   ├── prompts.js          # System prompts for Planner/Cultural modes
-│   ├── tts_server.py       # Python Edge TTS Server
-│   ├── data/               # Knowledge base
-│   │   └── travel_data.json
-│   ├── requirements.txt    # Python dependencies
-│   └── package.json        # Node dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx         # React UI (with Markdown rendering)
-│   │   └── App.css         # Styling (Glassmorphism + Animations)
-│   └── package.json        # Frontend dependencies (react-markdown, etc.)
-└── README.md
-```
-
-## Troubleshooting
-
-- **TTS Error (ModuleNotFoundError)**: Ensure you activated the venv and ran `pip install flask flask-cors edge-tts`.
-- **Blank Page**: Ensure the Backend server (port 3001) is running before the Frontend.
-- **RAG not working**: Check the console logs of `server.js` for `[RAG] Embeddings generated`.
-
-## License
-
-MIT
+## 📜 License
+MIT - Created for AI Cultural Exploration.

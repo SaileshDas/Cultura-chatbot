@@ -1179,3 +1179,70 @@
   color: var(--headline);
   font-weight: 600;
 }
+
+/* Voice Input Styles */
+.mic-button {
+  border: none;
+  border-radius: 999px;
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--fg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.mic-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(127, 138, 255, 0.3);
+}
+
+.mic-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mic-button.recording {
+  background: linear-gradient(125deg, #ff4444, #cc0000);
+  border-color: #ff4444;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.mic-button.recording:hover {
+  background: linear-gradient(125deg, #ff5555, #dd0000);
+}
+
+.recording-status {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.7);
+  }
+
+  50% {
+    box-shadow: 0 0 0 10px rgba(255, 68, 68, 0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

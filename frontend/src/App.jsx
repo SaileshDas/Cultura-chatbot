@@ -24,10 +24,14 @@ function App() {
 	const [profileSaving, setProfileSaving] = useState(false);
 	const [showPromptDropdown, setShowPromptDropdown] = useState(false);
 	const [chatMode, setChatMode] = useState('cultural'); // 'cultural' | 'planner'
+	const [isRecording, setIsRecording] = useState(false);
+	const [recordingStatus, setRecordingStatus] = useState(''); // Status message during recording
 	const chatHistoryEndRef = useRef(null);
 	const inputRef = useRef(null);
 	const dropdownRef = useRef(null);
 	const currentAudioRef = useRef(null);
+	const mediaRecorderRef = useRef(null);
+	const audioChunksRef = useRef([]);
 	// -------------------------
 
 	// --- CLIENT HELPERS ---
@@ -238,6 +242,140 @@ function App() {
 			speakWithBrowserTTS(text);
 		}
 	}, [speakWithBrowserTTS]);
+
+	// --- VOICE INPUT (STT) FUNCTIONS ---
+	const startRecording = async () => {
+		if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+			alert('Your browser does not support audio recording.');
+			return;
+		}
+
+		try {
+			setRecordingStatus('Starting recording...');
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+			const mediaRecorder = new MediaRecorder(stream);
+			mediaRecorderRef.current = mediaRecorder;
+			audioChunksRef.current = [];
+
+			mediaRecorder.ondataavailable = (event) => {
+				if (event.data.size > 0) {
+					audioChunksRef.current.push(event.data);
+				}
+			};
+
+			mediaRecorder.onstop = async () => {
+				setRecordingStatus('Processing audio...');
+				const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+
+				// Try Whisper first, fallback to Web Speech API if it fails
+				const transcribed = await transcribeAudio(audioBlob);
+
+				if (transcribed) {
+					setInputMessage(transcribed);
+					setRecordingStatus('');
+				}
+
+				// Cleanup
+				stream.getTracks().forEach(track => track.stop());
+			};
+
+			mediaRecorder.start();
+			setIsRecording(true);
+			setRecordingStatus('Recording... (click again to stop)');
+
+		} catch (error) {
+			console.error('Error accessing microphone:', error);
+			setRecordingStatus('');
+			alert('Failed to access microphone. Please check permissions.');
+		}
+	};
+
+	const stopRecording = () => {
+		if (mediaRecorderRef.current && isRecording) {
+			mediaRecorderRef.current.stop();
+			setIsRecording(false);
+		}
+	};
+
+	const transcribeAudio = async (audioBlob) => {
+		try {
+			// Try Whisper backend first
+			const formData = new FormData();
+			formData.append('audio', audioBlob, 'recording.webm');
+
+			setRecordingStatus('Transcribing with Whisper...');
+			const response = await fetch('http://localhost:5000/api/transcribe', {
+				method: 'POST',
+				body: formData,
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+				if (data.status === 'success' && data.text) {
+					console.log(`[Whisper] Transcribed: "${data.text}" (Language: ${data.language})`);
+					return data.text;
+				}
+			}
+
+			// If Whisper fails, fallback to Web Speech API
+			console.warn('[Whisper] Failed, falling back to Web Speech API');
+			return await fallbackToWebSpeech();
+
+		} catch (error) {
+			console.error('[Whisper] Transcription error:', error);
+			return await fallbackToWebSpeech();
+		}
+	};
+
+	const fallbackToWebSpeech = () => {
+		return new Promise((resolve) => {
+			setRecordingStatus('Using browser speech recognition...');
+
+			const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+			if (!SpeechRecognition) {
+				alert('Speech recognition not supported in this browser.');
+				setRecordingStatus('');
+				resolve('');
+				return;
+			}
+
+			const recognition = new SpeechRecognition();
+			recognition.lang = 'en-IN'; // Indian English, can also support 'kn-IN' for Kannada
+			recognition.interimResults = false;
+			recognition.maxAlternatives = 1;
+
+			recognition.onresult = (event) => {
+				const transcript = event.results[0][0].transcript;
+				console.log('[Web Speech] Transcribed:', transcript);
+				setRecordingStatus('');
+				resolve(transcript);
+			};
+
+			recognition.onerror = (event) => {
+				console.error('[Web Speech] Error:', event.error);
+				setRecordingStatus('');
+				alert(`Speech recognition error: ${event.error}`);
+				resolve('');
+			};
+
+			recognition.onend = () => {
+				setRecordingStatus('');
+			};
+
+			recognition.start();
+		});
+	};
+
+	const handleMicClick = () => {
+		if (isRecording) {
+			stopRecording();
+		} else {
+			startRecording();
+		}
+	};
+
 
 	// --- AUTH HELPERS ---
 	const saveAuth = (token, user) => {
@@ -836,6 +974,25 @@ function App() {
 										}
 									/>
 									<button
+										type="button"
+										className={`mic-button ${isRecording ? 'recording' : ''}`}
+										onClick={handleMicClick}
+										disabled={isTalking || !currentUser || !activeChatId}
+										aria-label={isRecording ? "Stop recording" : "Start voice input"}
+										title={isRecording ? "Stop recording" : "Voice input (Whisper STT)"}
+									>
+										{isRecording ? (
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+												<rect x="6" y="6" width="12" height="12" rx="2" />
+											</svg>
+										) : (
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+												<path d="M12 1C10.3431 1 9 2.34315 9 4V12C9 13.6569 10.3431 15 12 15C13.6569 15 15 13.6569 15 12V4C15 2.34315 13.6569 1 12 1Z" stroke="currentColor" strokeWidth="2" />
+												<path d="M19 10V12C19 15.866 15.866 19 12 19M5 10V12C5 15.866 8.13401 19 12 19M12 19V23M8 23H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+											</svg>
+										)}
+									</button>
+									<button
 										type="submit"
 										className="send-button"
 										disabled={
@@ -857,6 +1014,7 @@ function App() {
 										)}
 									</button>
 								</form>
+								{recordingStatus && <p className="recording-status">{recordingStatus}</p>}
 								<p className="input-hint">Press Enter to send • Cultura narrates each reply aloud</p>
 							</div>
 						</div>

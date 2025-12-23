@@ -170,10 +170,85 @@ def list_voices():
     ]
     return jsonify({"voices": voices}), 200
 
+# --- Whisper STT Integration ---
+whisper_model = None
+
+def load_whisper_model():
+    """Load Whisper model lazily on first use"""
+    global whisper_model
+    if whisper_model is None:
+        try:
+            from faster_whisper import WhisperModel
+            print("[Whisper] Loading 'base' model... (this may take a moment on first run)")
+            # Using 'base' model for balance of speed and accuracy
+            # Options: tiny, base, small, medium, large
+            whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+            print("[Whisper] Model loaded successfully!")
+        except Exception as e:
+            print(f"[Whisper] Failed to load model: {e}")
+            raise
+    return whisper_model
+
+@app.route('/api/transcribe', methods=['POST'])
+def transcribe_audio():
+    """
+    Transcribe audio file to text using Whisper.
+    Accepts audio in various formats (webm, wav, mp3, etc.)
+    """
+    try:
+        # Check if audio file is present
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        audio_file = request.files['audio']
+        
+        if audio_file.filename == '':
+            return jsonify({"error": "Empty filename"}), 400
+        
+        # Save audio to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp_audio:
+            audio_path = tmp_audio.name
+            audio_file.save(audio_path)
+        
+        try:
+            # Load Whisper model
+            model = load_whisper_model()
+            
+            # Transcribe
+            print(f"[Whisper] Transcribing audio file: {audio_file.filename}")
+            segments, info = model.transcribe(audio_path, beam_size=5)
+            
+            # Extract text from segments
+            transcribed_text = " ".join([segment.text for segment in segments])
+            
+            print(f"[Whisper] Transcription complete: '{transcribed_text}' (Language: {info.language})")
+            
+            return jsonify({
+                "status": "success",
+                "text": transcribed_text.strip(),
+                "language": info.language,
+                "engine": "whisper"
+            }), 200
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(audio_path):
+                os.unlink(audio_path)
+    
+    except Exception as e:
+        print(f"[Whisper] Transcription error: {e}")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "message": "Whisper transcription failed. Client should fallback to Web Speech API."
+        }), 500
+
 if __name__ == '__main__':
     print("Starting Edge TTS Server on http://127.0.0.1:5000")
     print(f"Using default voice: {DEFAULT_VOICE}")
     print("Edge TTS provides high-quality Microsoft voices without model downloads.")
+    print("\n[Whisper] STT endpoint available at /api/transcribe")
+    print("[Whisper] Model will be downloaded on first transcription request.")
     app.run(debug=True, port=5000)
 
 # NOTE TO USER:
