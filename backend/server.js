@@ -44,12 +44,13 @@ function findChat(userId, chatId) {
     return chats.find((c) => c.id === chatId);
 }
 
-function createChat(userId, title) {
+function createChat(userId, title, mode = 'cultural') {
     const chats = getUserChats(userId);
     const id = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const chat = {
         id,
-        title: title || 'New chat',
+        title: title || (mode === 'planner' ? 'Trip Planning' : 'New chat'),
+        mode: mode, // 'cultural' or 'planner'
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         messages: [],
@@ -58,35 +59,19 @@ function createChat(userId, title) {
     return chat;
 }
 
-// System instruction defines the chatbot's personality and knowledge domain
-const systemInstruction = `You are Cultura, a warm and knowledgeable cultural guide from Karnataka. You speak like a local who loves sharing Karnataka's rich heritage with genuine enthusiasm—not overly formal or exaggerated.
-
-Your character:
-- Speak conversationally, like you're chatting with a friend over chai
-- Use authentic Kannada cultural terms naturally when relevant (e.g., "nada," "raagi," "haggis," "Diwali," "temple town")
-- Show genuine interest without being theatrical or condescending
-- Keep stories personal and relatable, rooted in real cultural practices
-
-Your expertise:
-- History: ancient kingdoms (Mauryan, Chalukya, Hoysala, Vijayanagara), colonial period, independence
-- Heritage: temples, forts, palaces, traditional arts (Yakshagana, Kathak, Dollu Kunitha)
-- Cuisine: traditional dishes like ragi mudde, jolada roti, bisi bele bath, akki roti, chiroti
-- Geography: Western Ghats, coastal regions, coffee plantations, silk industry
-- Traditions: festivals (Ugadi, Dasara, Diwali), crafts, rituals, family values
-
-Guidelines:
-- Keep responses concise (2-3 sentences typically, max 4-5 for detailed questions)
-- Focus directly on what the user asks—no unnecessary preamble
-- Share interesting tidbits naturally, as if you know the place and its people
-- Avoid over-the-top phrases like "magnificent," "glorious," or "breathtaking"—just be real
-- If unsure, say so honestly rather than guessing
-- IMPORTANT: Never use markdown formatting, asterisks, or special symbols in your responses. Speak in plain text only since responses are read aloud by text-to-speech.
-
-Remember: You're not a tourist guide—you're a Kannadiga sharing your heritage.`;
+// Import prompt templates
+const { culturalPrompt, getPlannerPrompt } = require('./prompts');
 
 // Helper function to sanitize text for TTS (remove markdown and special characters)
 function sanitizeForTTS(text) {
     return text
+        // Remove markdown tables entirely (or just read the content?)
+        // For now, let's remove the table structure lines but keep the content if possible, 
+        // OR better: skip reading the table rows effectively to avoid reading "pipe separator pipe".
+        // Strategy: Remove lines starting with | or containing | separators excessively.
+        .replace(/^\|.*\|$/gm, '')          // Remove table rows
+        .replace(/^\s*[-:]+\s*[-:|]+\s*[-:]+\s*$/gm, '') // Remove table divider rows
+
         // Remove markdown bold/italic
         .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold** -> bold
         .replace(/\*([^*]+)\*/g, '$1')      // *italic* -> italic
@@ -97,6 +82,9 @@ function sanitizeForTTS(text) {
         // Remove markdown lists
         .replace(/^[\*\-\+]\s+/gm, '')      // * item -> item
         .replace(/^\d+\.\s+/gm, '')         // 1. item -> item
+        // Remove checkboxes
+        .replace(/\[\s?\]/g, '')            // [ ] -> 
+        .replace(/\[x\]/g, '')              // [x] -> 
         // Remove code blocks and inline code
         .replace(/```[\s\S]*?```/g, '')     // ```code``` -> (removed)
         .replace(/`([^`]+)`/g, '$1')        // `code` -> code
@@ -247,6 +235,7 @@ app.get('/api/chats', authMiddleware, (req, res) => {
     const chats = getUserChats(req.user.id).map((c) => ({
         id: c.id,
         title: c.title,
+        mode: c.mode || 'cultural', // Include mode field
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
     }));
@@ -254,8 +243,8 @@ app.get('/api/chats', authMiddleware, (req, res) => {
 });
 
 app.post('/api/chats', authMiddleware, (req, res) => {
-    const { title } = req.body || {};
-    const chat = createChat(req.user.id, title);
+    const { title, mode } = req.body || {};
+    const chat = createChat(req.user.id, title, mode);
     res.status(201).json({ chat });
 });
 
@@ -294,6 +283,16 @@ app.patch('/api/chats/:chatId', authMiddleware, (req, res) => {
     res.json({ chat });
 });
 
+const RAGSystem = require('./rag');
+const ragSystem = new RAGSystem(ai);
+
+// Initialize RAG on startup
+(async () => {
+    await ragSystem.loadData('./data/travel_data.json');
+})();
+
+// ... (Rest of code)
+
 // --- Chat Completion Route ---
 app.post('/api/chat', authMiddleware, async (req, res) => {
     const userMessage = req.body.message;
@@ -312,6 +311,18 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
             return res.status(404).json({ error: 'Chat not found.' });
         }
 
+        // --- RAG Step: Retrieve Context ---
+        let contextText = '';
+        try {
+            const results = await ragSystem.search(userMessage, 3);
+            if (results.length > 0) {
+                contextText = results.map(r => r.item.text).join('\n\n');
+                console.log(`[RAG] Retrieved ${results.length} chunks for context.`);
+            }
+        } catch (ragErr) {
+            console.error('[RAG] Retrieval failed (continuing without context):', ragErr);
+        }
+
         // Build contents array with full conversation history
         const contents = [
             ...chat.messages.map(msg => ({
@@ -320,9 +331,24 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
             })),
             {
                 role: 'user',
-                parts: [{ text: userMessage }]
+                parts: [{
+                    text: contextText
+                        ? `Context Information:\n${contextText}\n\nUser Question: ${userMessage}`
+                        : userMessage
+                }]
             }
         ];
+
+        // Get user profile for planner mode
+        const userProfile = getUserById(req.user.id)?.profile || {};
+
+        // Select system instruction based on chat mode
+        const chatMode = chat.mode || 'cultural';
+        const systemInstruction = chatMode === 'planner'
+            ? getPlannerPrompt(userProfile)
+            : culturalPrompt;
+
+        console.log(`Chat mode: ${chatMode}`);
 
         // --- Gemini API Call ---
         const response = await ai.models.generateContent({
@@ -336,12 +362,13 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
         const textResponse = response.text.trim();
 
         // Derive a simple title from the first user message if chat is still using default title
-        if (chat.title === 'New chat' || !chat.title) {
+        if (chat.title === 'New chat' || chat.title === 'New Trip Plan' || !chat.title) {
             const snippet = userMessage.length > 60 ? `${userMessage.slice(0, 57)}...` : userMessage;
-            chat.title = snippet || 'New chat';
+            chat.title = snippet || (chatMode === 'planner' ? 'Trip Plan' : 'New chat');
         }
 
         // Store user message and response in chat
+        // NOTE: We store the ORIGINAL user message without the RAG context to keep history clean
         chat.messages.push(
             { role: 'user', text: userMessage, createdAt: new Date().toISOString() },
             { role: 'ai', text: textResponse, createdAt: new Date().toISOString() }
@@ -356,6 +383,7 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
         // Send the response back to the frontend
         res.json({
             response: textResponse,
+            ttsText: sanitizeForTTS(textResponse),
             chatId: chat.id,
             // Placeholder values for future audio/lip-sync integration
             audioUrl: '',

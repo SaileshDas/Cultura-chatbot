@@ -956,10 +956,13 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
+
   50% {
     transform: scale(1.35);
     opacity: 0.55;
@@ -967,9 +970,12 @@
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-6px);
   }
@@ -980,6 +986,7 @@
     transform: scale(1) translateY(0);
     opacity: 0.4;
   }
+
   100% {
     transform: scale(1.08) translateY(-12px);
     opacity: 0.7;
@@ -987,21 +994,25 @@
 }
 
 @keyframes auroraDrift {
+
   0%,
   100% {
     transform: rotate(0deg) translateY(0);
   }
+
   50% {
     transform: rotate(8deg) translateY(-30px);
   }
 }
 
 @keyframes orbPulse {
+
   0%,
   100% {
     transform: scale(1);
     opacity: 0.8;
   }
+
   50% {
     transform: scale(1.5);
     opacity: 0.4;
@@ -1013,6 +1024,7 @@
     opacity: 0;
     transform: translateX(30px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -1024,6 +1036,7 @@
     opacity: 0;
     transform: translateX(-30px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -1035,6 +1048,7 @@
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1046,4 +1060,122 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Mode Selector */
+.mode-selector {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  padding: 1rem 0;
+}
+
+.mode-button {
+  padding: 0.7rem 1.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--fg);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.mode-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-button.active {
+  background: linear-gradient(120deg, var(--accent), #ff9f7a);
+  color: #1c0b03;
+  border-color: transparent;
+  box-shadow: 0 8px 24px rgba(255, 122, 85, 0.35);
+}
+
+.mode-button.active:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* --- Markdown Styles --- */
+.message-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.message-content th,
+.message-content td {
+  padding: 0.8rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.message-content th {
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.message-content tr:last-child td {
+  border-bottom: none;
+}
+
+.message-content tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.message-content ul,
+.message-content ol {
+  margin: 0.5rem 0 0.5rem 1.5rem;
+}
+
+.message-content li {
+  margin-bottom: 0.3rem;
+}
+
+/* Checklist Styles */
+.message-content input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.1em;
+  height: 1.1em;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  margin-right: 0.6em;
+  vertical-align: middle;
+  position: relative;
+  cursor: pointer;
+}
+
+.message-content input[type="checkbox"]:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.message-content input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.8em;
+  color: #1c0b03;
+  font-weight: bold;
+}
+
+.message-content strong {
+  color: var(--headline);
+  font-weight: 600;
 }

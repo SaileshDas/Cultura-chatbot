@@ -1,4 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './App.css';
 
 
@@ -21,6 +23,7 @@ function App() {
 	const [profileError, setProfileError] = useState('');
 	const [profileSaving, setProfileSaving] = useState(false);
 	const [showPromptDropdown, setShowPromptDropdown] = useState(false);
+	const [chatMode, setChatMode] = useState('cultural'); // 'cultural' | 'planner'
 	const chatHistoryEndRef = useRef(null);
 	const inputRef = useRef(null);
 	const dropdownRef = useRef(null);
@@ -420,6 +423,7 @@ function App() {
 
 			const data = await response.json();
 			const chatbotResponseText = data.response || "I could not find a text response.";
+			const ttsText = data.ttsText || chatbotResponseText;
 
 			// Add AI response to chat history
 			setChatHistory(prev => [...prev, { role: 'ai', text: chatbotResponseText }]);
@@ -429,7 +433,7 @@ function App() {
 			console.log('Chatbot Text Response:', chatbotResponseText);
 
 			// 2. Use the NATIVE BROWSER TTS function to speak the response
-			speak(chatbotResponseText);
+			speak(ttsText);
 
 		} catch (error) {
 			console.error('Error in chat process:', error);
@@ -617,6 +621,27 @@ function App() {
 							</div>
 						</div>
 
+
+						{/* Mode Selector */}
+						{currentUser && (
+							<div className="mode-selector" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+								<button
+									type="button"
+									className={`mode-button ${chatMode === 'cultural' ? 'active' : ''}`}
+									onClick={() => setChatMode('cultural')}
+								>
+									🏛️ Cultural Guide
+								</button>
+								<button
+									type="button"
+									className={`mode-button ${chatMode === 'planner' ? 'active' : ''}`}
+									onClick={() => setChatMode('planner')}
+								>
+									✈️ Travel Planner
+								</button>
+							</div>
+						)}
+
 						{currentUser && (
 							<div className="chat-toolbar">
 								<div>
@@ -646,7 +671,10 @@ function App() {
 												const res = await fetch(`${API_BASE}/api/chats`, {
 													method: 'POST',
 													headers: authHeaders,
-													body: JSON.stringify({ title: 'New chat' }),
+													body: JSON.stringify({
+														title: chatMode === 'planner' ? 'New Trip Plan' : 'New chat',
+														mode: chatMode
+													}),
 												});
 												const data = await res.json();
 												if (res.ok && data.chat) {
@@ -754,7 +782,20 @@ function App() {
 									chatHistory.map((msg, idx) => (
 										<div key={idx} className={`message-bubble ${msg.role}`}>
 											<div className="message-content">
-												{msg.text}
+												<ReactMarkdown
+													remarkPlugins={[remarkGfm]}
+													components={{
+														input: ({ node, ...props }) => (
+															<input
+																type="checkbox"
+																defaultChecked={props.checked}
+																style={{ margin: '0 0.5em 0.2em 0', verticalAlign: 'middle' }}
+															/>
+														)
+													}}
+												>
+													{msg.text}
+												</ReactMarkdown>
 											</div>
 										</div>
 									))
@@ -820,178 +861,181 @@ function App() {
 							</div>
 						</div>
 					</section>
-				</div>
-			)}
+				</div >
+			)
+			}
 
-			{currentUser && view === 'profile' && (
-				<div className="content-grid">
-					<section className="immersive-panel">
-						<header className="section-header">
-							<p className="eyebrow">Traveler profile</p>
-						</header>
-						<div className="profile-panel">
-							<h3>Tell Cultura how you like to travel.</h3>
-							<p className="subtitle">
-								These preferences help future destination guides stay aligned with your pace, interests, and comfort.
-							</p>
-							<div className="profile-grid">
-								<div className="profile-field">
-									<label htmlFor="fullName">Full name</label>
-									<input
-										id="fullName"
-										type="text"
-										value={profile?.fullName || ''}
-										onChange={(e) => setProfile({ ...(profile || {}), fullName: e.target.value })}
-									/>
+			{
+				currentUser && view === 'profile' && (
+					<div className="content-grid">
+						<section className="immersive-panel">
+							<header className="section-header">
+								<p className="eyebrow">Traveler profile</p>
+							</header>
+							<div className="profile-panel">
+								<h3>Tell Cultura how you like to travel.</h3>
+								<p className="subtitle">
+									These preferences help future destination guides stay aligned with your pace, interests, and comfort.
+								</p>
+								<div className="profile-grid">
+									<div className="profile-field">
+										<label htmlFor="fullName">Full name</label>
+										<input
+											id="fullName"
+											type="text"
+											value={profile?.fullName || ''}
+											onChange={(e) => setProfile({ ...(profile || {}), fullName: e.target.value })}
+										/>
+									</div>
+									<div className="profile-field">
+										<label htmlFor="homeCity">Home city</label>
+										<input
+											id="homeCity"
+											type="text"
+											value={profile?.homeCity || ''}
+											onChange={(e) => setProfile({ ...(profile || {}), homeCity: e.target.value })}
+										/>
+									</div>
+									<div className="profile-field">
+										<label htmlFor="homeCountry">Home country</label>
+										<input
+											id="homeCountry"
+											type="text"
+											value={profile?.homeCountry || ''}
+											onChange={(e) => setProfile({ ...(profile || {}), homeCountry: e.target.value })}
+										/>
+									</div>
+									<div className="profile-field">
+										<label htmlFor="languages">Preferred languages</label>
+										<input
+											id="languages"
+											type="text"
+											placeholder="e.g. English, Kannada"
+											value={
+												Array.isArray(profile?.preferredLanguages)
+													? profile.preferredLanguages.join(', ')
+													: profile?.preferredLanguages || ''
+											}
+											onChange={(e) =>
+												setProfile({
+													...(profile || {}),
+													preferredLanguages: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+												})
+											}
+										/>
+									</div>
+									<div className="profile-field">
+										<label htmlFor="interests">Travel interests</label>
+										<textarea
+											id="interests"
+											placeholder="Heritage walks, food trails, temples, trekking…"
+											value={profile?.travelInterests || ''}
+											onChange={(e) => setProfile({ ...(profile || {}), travelInterests: e.target.value })}
+										/>
+									</div>
+									<div className="profile-field">
+										<label htmlFor="style">Travel style</label>
+										<select
+											id="style"
+											value={profile?.travelStyle || ''}
+											onChange={(e) => setProfile({ ...(profile || {}), travelStyle: e.target.value })}
+										>
+											<option value="">Select</option>
+											<option value="slow">Slow & immersive</option>
+											<option value="packed">Packed itinerary</option>
+											<option value="family">Family-friendly</option>
+											<option value="solo">Solo explorer</option>
+										</select>
+									</div>
+									<div className="profile-field">
+										<label htmlFor="budget">Budget level</label>
+										<select
+											id="budget"
+											value={profile?.budgetLevel || ''}
+											onChange={(e) => setProfile({ ...(profile || {}), budgetLevel: e.target.value })}
+										>
+											<option value="">Select</option>
+											<option value="budget">Budget</option>
+											<option value="mid-range">Mid-range</option>
+											<option value="premium">Premium</option>
+										</select>
+									</div>
+									<div className="profile-field">
+										<label htmlFor="access">Accessibility needs</label>
+										<textarea
+											id="access"
+											placeholder="Mobility, dietary or sensory preferences to keep in mind."
+											value={profile?.accessibilityNeeds || ''}
+											onChange={(e) => setProfile({ ...(profile || {}), accessibilityNeeds: e.target.value })}
+										/>
+									</div>
 								</div>
-								<div className="profile-field">
-									<label htmlFor="homeCity">Home city</label>
-									<input
-										id="homeCity"
-										type="text"
-										value={profile?.homeCity || ''}
-										onChange={(e) => setProfile({ ...(profile || {}), homeCity: e.target.value })}
-									/>
-								</div>
-								<div className="profile-field">
-									<label htmlFor="homeCountry">Home country</label>
-									<input
-										id="homeCountry"
-										type="text"
-										value={profile?.homeCountry || ''}
-										onChange={(e) => setProfile({ ...(profile || {}), homeCountry: e.target.value })}
-									/>
-								</div>
-								<div className="profile-field">
-									<label htmlFor="languages">Preferred languages</label>
-									<input
-										id="languages"
-										type="text"
-										placeholder="e.g. English, Kannada"
-										value={
-											Array.isArray(profile?.preferredLanguages)
-												? profile.preferredLanguages.join(', ')
-												: profile?.preferredLanguages || ''
-										}
-										onChange={(e) =>
-											setProfile({
-												...(profile || {}),
-												preferredLanguages: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-											})
-										}
-									/>
-								</div>
-								<div className="profile-field">
-									<label htmlFor="interests">Travel interests</label>
-									<textarea
-										id="interests"
-										placeholder="Heritage walks, food trails, temples, trekking…"
-										value={profile?.travelInterests || ''}
-										onChange={(e) => setProfile({ ...(profile || {}), travelInterests: e.target.value })}
-									/>
-								</div>
-								<div className="profile-field">
-									<label htmlFor="style">Travel style</label>
-									<select
-										id="style"
-										value={profile?.travelStyle || ''}
-										onChange={(e) => setProfile({ ...(profile || {}), travelStyle: e.target.value })}
-									>
-										<option value="">Select</option>
-										<option value="slow">Slow & immersive</option>
-										<option value="packed">Packed itinerary</option>
-										<option value="family">Family-friendly</option>
-										<option value="solo">Solo explorer</option>
-									</select>
-								</div>
-								<div className="profile-field">
-									<label htmlFor="budget">Budget level</label>
-									<select
-										id="budget"
-										value={profile?.budgetLevel || ''}
-										onChange={(e) => setProfile({ ...(profile || {}), budgetLevel: e.target.value })}
-									>
-										<option value="">Select</option>
-										<option value="budget">Budget</option>
-										<option value="mid-range">Mid-range</option>
-										<option value="premium">Premium</option>
-									</select>
-								</div>
-								<div className="profile-field">
-									<label htmlFor="access">Accessibility needs</label>
-									<textarea
-										id="access"
-										placeholder="Mobility, dietary or sensory preferences to keep in mind."
-										value={profile?.accessibilityNeeds || ''}
-										onChange={(e) => setProfile({ ...(profile || {}), accessibilityNeeds: e.target.value })}
-									/>
-								</div>
-							</div>
-							<div className="profile-footer">
-								<div>
-									{profileError && <div className="auth-error">{profileError}</div>}
-								</div>
-								<div style={{ display: 'flex', gap: '0.5rem' }}>
-									<button
-										type="button"
-										className="nav-pill ghost"
-										disabled={profileSaving}
-										onClick={async () => {
-											if (!authToken || !profile) return;
-											setProfileSaving(true);
-											setProfileError('');
-											try {
-												const res = await fetch(`${API_BASE}/api/profile`, {
-													method: 'PUT',
-													headers: authHeaders,
-													body: JSON.stringify({ profile }),
-												});
-												const data = await res.json();
-												if (!res.ok) {
-													setProfileError(data.error || 'Failed to save profile.');
-												} else {
-													setProfile(data.profile || profile);
+								<div className="profile-footer">
+									<div>
+										{profileError && <div className="auth-error">{profileError}</div>}
+									</div>
+									<div style={{ display: 'flex', gap: '0.5rem' }}>
+										<button
+											type="button"
+											className="nav-pill ghost"
+											disabled={profileSaving}
+											onClick={async () => {
+												if (!authToken || !profile) return;
+												setProfileSaving(true);
+												setProfileError('');
+												try {
+													const res = await fetch(`${API_BASE}/api/profile`, {
+														method: 'PUT',
+														headers: authHeaders,
+														body: JSON.stringify({ profile }),
+													});
+													const data = await res.json();
+													if (!res.ok) {
+														setProfileError(data.error || 'Failed to save profile.');
+													} else {
+														setProfile(data.profile || profile);
+													}
+												} catch (err) {
+													console.error(err);
+													setProfileError('Failed to save profile.');
+												} finally {
+													setProfileSaving(false);
 												}
-											} catch (err) {
-												console.error(err);
-												setProfileError('Failed to save profile.');
-											} finally {
-												setProfileSaving(false);
-											}
-										}}
-									>
-										{profileSaving ? 'Saving…' : 'Save profile'}
-									</button>
-									<button
-										type="button"
-										className="nav-pill profile-danger"
-										onClick={async () => {
-											if (!authToken) return;
-											const confirmDelete = window.confirm(
-												'Delete your Cultura account and all chats permanently?'
-											);
-											if (!confirmDelete) return;
-											try {
-												await fetch(`${API_BASE}/api/account`, {
-													method: 'DELETE',
-													headers: authHeaders,
-												});
-											} catch {
-												// ignore network errors on delete
-											} finally {
-												handleLogout();
-											}
-										}}
-									>
-										Delete account
-									</button>
+											}}
+										>
+											{profileSaving ? 'Saving…' : 'Save profile'}
+										</button>
+										<button
+											type="button"
+											className="nav-pill profile-danger"
+											onClick={async () => {
+												if (!authToken) return;
+												const confirmDelete = window.confirm(
+													'Delete your Cultura account and all chats permanently?'
+												);
+												if (!confirmDelete) return;
+												try {
+													await fetch(`${API_BASE}/api/account`, {
+														method: 'DELETE',
+														headers: authHeaders,
+													});
+												} catch {
+													// ignore network errors on delete
+												} finally {
+													handleLogout();
+												}
+											}}
+										>
+											Delete account
+										</button>
+									</div>
 								</div>
 							</div>
-						</div>
-					</section>
-				</div>
-			)}
-		</div>
+						</section>
+					</div>
+				)
+			}
+		</div >
 	);
 }
 

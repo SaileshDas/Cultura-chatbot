@@ -41,7 +41,7 @@ def sanitize_text_for_speech(text):
 # - 'en-US-AriaNeural' (Female, US English)
 # - 'en-GB-SoniaNeural' (Female, British English)
 
-async def generate_audio_with_edge_tts(text, voice=None):
+async def generate_audio_with_edge_tts(text, voice=None, rate="+0%"):
     """
     Generate audio using Edge TTS.
     Returns base64-encoded audio data or None on failure.
@@ -56,7 +56,7 @@ async def generate_audio_with_edge_tts(text, voice=None):
         
         try:
             # Create Edge TTS communicator
-            communicate = edge_tts.Communicate(text, voice)
+            communicate = edge_tts.Communicate(text, voice, rate=rate)
             
             # Save audio to file
             await communicate.save(output_path)
@@ -96,14 +96,30 @@ def generate_tts():
         # Sanitize text to remove markdown and special characters
         clean_text = sanitize_text_for_speech(text_prompt)
 
-        print(f"Received TTS request for voice '{voice_id}': '{clean_text[:50]}...'")
+        # Calculate dynamic rate based on text length
+        # Short responses (< 50 chars): Normal speed (+0%)
+        # Long responses (> 400 chars): Max speed (+25%)
+        # Linear interpolation in between
+        length = len(clean_text)
+        if length < 50:
+            rate_val = 0
+        elif length > 400:
+            rate_val = 25
+        else:
+            # Linear scaling: 0 at 50, 25 at 400
+            # Slope = 25 / 350 approx 0.071
+            rate_val = int((length - 50) * (25 / 350))
+        
+        rate_str = f"+{rate_val}%"
+        
+        print(f"Received TTS request for voice '{voice_id}': '{clean_text[:50]}...' (Len: {length}, Rate: {rate_str})")
         
         # Generate audio with Edge TTS (run async function in sync context)
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             audio_base64 = loop.run_until_complete(
-                generate_audio_with_edge_tts(clean_text, voice_id)
+                generate_audio_with_edge_tts(clean_text, voice_id, rate=rate_str)
             )
         finally:
             loop.close()
@@ -115,7 +131,8 @@ def generate_tts():
                 "audio_base64": audio_base64,
                 "mime_type": "audio/mp3",
                 "engine": "edge-tts",
-                "voice": voice_id
+                "voice": voice_id,
+                "rate": rate_str
             }), 200
         else:
             # Edge TTS failed - indicate fallback needed

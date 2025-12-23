@@ -1,0 +1,46 @@
+[
+    {
+        "id": "hampi_01",
+        "text": "The Virupaksha Temple in Hampi is dedicated to Lord Shiva and is one of the few temples that has functioned uninterruptedly since the 7th century AD. It is known for its 50-meter high gopuram.",
+        "tags": [
+            "hampi",
+            "temple",
+            "history"
+        ]
+    },
+    {
+        "id": "mysore_01",
+        "text": "Mysore Palace, also known as Amba Vilas Palace, is a historical palace and a royal residence. It is the second most visited tourist attraction in India, after the Taj Mahal. The palace is illuminated with 97,000 light bulbs on Sundays and public holidays.",
+        "tags": [
+            "mysore",
+            "palace",
+            "architecture"
+        ]
+    },
+    {
+        "id": "coorg_01",
+        "text": "Coorg (Kodagu) is known as the 'Scotland of India' due to its misty landscapes and lush green coffee plantations. The best time to visit is from October to March.",
+        "tags": [
+            "coorg",
+            "nature",
+            "coffee"
+        ]
+    },
+    {
+        "id": "food_01",
+        "text": "Mysore Pak is a traditional sweet dish from Karnataka, made of ghee, sugar, gram flour, and often cardamom. It was first prepared in the kitchens of the Mysore Palace.",
+        "tags": [
+            "food",
+            "sweet",
+            "mysore"
+        ]
+    },
+    {
+        "id": "secret_01",
+        "text": "The secret code of the lost temple is 1234. This is a rumored code used by ancient priests.",
+        "tags": [
+            "secret",
+            "myth"
+        ]
+    }
+]

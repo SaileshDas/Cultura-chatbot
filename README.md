@@ -1,14 +1,21 @@
 # Cultura Chatbot - AI Cultural Guide for Karnataka
 
-An interactive voice-enabled chatbot that shares Karnataka's rich cultural heritage using Google Gemini AI and Microsoft Edge TTS for natural Indian English speech synthesis.
+An interactive voice-enabled chatbot that shares Karnataka's rich cultural heritage using Google Gemini AI and Microsoft Edge TTS for natural Indian English speech synthesis. It now features a dedicated **Travel Planner Mode** for personalized itineraries.
 
 ## Features
 
-- 🎯 **Culturally-grounded AI**: Powered by Google Gemini with custom prompts for Karnataka heritage
-- 🗣️ **Voice-first experience**: Microsoft Edge TTS with authentic South Indian English voice
-- 👤 **User accounts**: Persistent chat history and personalized profiles
-- 💬 **Multi-chat support**: Create and manage multiple conversation threads
-- ⚡ **Modern stack**: React (Vite), Node.js (Express), Edge TTS
+- 🎯 **Dual Modes**: 
+  - **Cultural Guide**: Expert on history, art, and custom traditions.
+  - **Travel Planner**: Creates structured, personalized day-by-day itineraries.
+- 🧠 **RAG (Retrieval Augmented Generation)**: Grounded responses using a custom knowledge base for accurate facts.
+- 🗣️ **Smart Voice**: 
+  - Authentic South Indian English accent (Edge TTS).
+  - **Dynamic Speed**: Automatically adjusts speaking rate for long responses (up to +25% faster) for a snappy experience.
+  - **Sanitized Output**: Reads natural language only, skipping markdown formatting like tables and special characters.
+- � **Interactive UI**:
+  - **Rich Markdown**: Renders tables for itineraries and formatted text.
+  - **Checklists**: Interactive checkboxes for travel tasks directly in the chat.
+- 👤 **User Accounts**: Persistent chat history and detailed traveler profiles.
 
 ## Prerequisites
 
@@ -34,15 +41,8 @@ cd backend
 # Install Node.js dependencies
 npm install
 
-# Create Python virtual environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# Install Python dependencies (Flask, Edge TTS)
-pip install -r requirements.txt
-
-# Create .env file with your API key
-# Copy .env.example to .env and add your Gemini API key
+# Create .env file
+# Copy .env.example to .env and add your GEMINI_API_KEY
 ```
 
 **Create `backend/.env` file:**
@@ -51,23 +51,40 @@ GEMINI_API_KEY=your_gemini_api_key_here
 JWT_SECRET=your_secret_key_for_sessions
 ```
 
-### 3. Frontend Setup
+### 3. TTS Server Setup (Python)
+
+This project uses a lightweight Python server for high-quality text-to-speech.
 
 ```powershell
-cd ..\frontend
+cd backend
+
+# Create virtual environment (Recommended)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install flask flask-cors edge-tts
+# OR
+pip install -r requirements.txt
+```
+
+### 4. Frontend Setup
+
+```powershell
+cd ../frontend
 npm install
 ```
 
-### 4. Running the Application
+### 5. Running the Application
 
-You need **3 terminals** running simultaneously:
+You need **3 terminals** running simultaneously to fully experience the app:
 
 **Terminal 1 - Backend Server:**
 ```powershell
 cd backend
-npm run dev
+node server.js
 ```
-Backend runs on `http://localhost:3001`
+Runs on `http://localhost:3001`
 
 **Terminal 2 - TTS Server:**
 ```powershell
@@ -75,121 +92,59 @@ cd backend
 .\.venv\Scripts\Activate.ps1
 python tts_server.py
 ```
-TTS server runs on `http://localhost:5000`
+Runs on `http://localhost:5000`
 
 **Terminal 3 - Frontend:**
 ```powershell
 cd frontend
 npm run dev
 ```
-Frontend runs on `http://localhost:5173`
+Runs on `http://localhost:5173`
 
-### 5. Access the Application
+### 6. Access the Application
 
-Open your browser to **http://localhost:5173** and create an account to start chatting!
+Open **http://localhost:5173** in your browser.
+
+## How to Use
+
+### Travel Planner Mode
+1.  Log in and go to your **Profile**.
+2.  Set your preferences (e.g., "Temples", "Low Budget").
+3.  Go to Chat, select **Travel Planner**.
+4.  Ask: "Plan a 2-day trip to Hampi".
+5.  View the **Table** itinerary and tick off items in the **Checklist**!
+
+### Testing RAG (Secret Feature)
+- Ask: "What is the secret code of the lost temple?"
+- Answer: The bot retrieves this secret from the local knowledge base (`backend/data/travel_data.json`).
 
 ## Project Structure
 
 ```
 Cultura-chatbot/
 ├── backend/
-│   ├── server.js           # Express server with Gemini integration
-│   ├── tts_server.py       # Edge TTS Flask server
+│   ├── server.js           # Express server + Gemini + RAG Logic
+│   ├── rag.js              # Retrieval Augmented Generation System
+│   ├── prompts.js          # System prompts for Planner/Cultural modes
+│   ├── tts_server.py       # Python Edge TTS Server
+│   ├── data/               # Knowledge base
+│   │   └── travel_data.json
 │   ├── requirements.txt    # Python dependencies
-│   ├── package.json        # Node dependencies
-│   └── .env               # Environment variables (create this)
+│   └── package.json        # Node dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx        # Main React component
-│   │   └── App.css        # Styling
-│   ├── package.json       # Frontend dependencies
-│   └── vite.config.js     # Vite configuration
+│   │   ├── App.jsx         # React UI (with Markdown rendering)
+│   │   └── App.css         # Styling (Glassmorphism + Animations)
+│   └── package.json        # Frontend dependencies (react-markdown, etc.)
 └── README.md
 ```
 
-## Voice Configuration
+## Troubleshooting
 
-The default voice is **`en-IN-PrabhatNeural`** (South Indian male English) for an authentic Karnataka feel.
-
-To change the voice, set the `EDGE_TTS_VOICE` environment variable:
-
-```powershell
-# In PowerShell (temporary)
-$env:EDGE_TTS_VOICE="en-IN-NeerjaNeural"
-python tts_server.py
-```
-
-**Available Indian English voices:**
-- `en-IN-PrabhatNeural` (Male, South Indian) - Default
-- `en-IN-NeerjaNeural` (Female, Indian)
-
-## Key Features Explained
-
-### 1. Smart Text-to-Speech
-- Automatically removes markdown formatting (*, **, #, etc.)
-- Sanitizes text for natural pronunciation
-- Uses Microsoft Edge TTS (no model downloads needed!)
-
-### 2. Conversation Management
-- Create multiple chat threads
-- Persistent chat history per user
-- Auto-generated chat titles from first message
-
-### 3. React Optimization
-- Fixed useEffect dependency loops for optimal performance
-- Prevents unnecessary API calls
-- Smooth user experience
-
-## Development Notes
-
-### Security
-- **Never commit `.env` files** - They're in `.gitignore`
-- Rotate API keys immediately if exposed
-- Use environment variables for all secrets
-
-### API Rate Limits
-- The system includes automatic retry logic for API overload
-- Gemini API has rate limits - be mindful during testing
-
-### Troubleshooting
-
-**"Model is overloaded" error:**
-- This was fixed! The issue was React useEffect loops, not Google's servers
-- If it persists, wait a few seconds and try again
-
-**TTS server not working:**
-```powershell
-# Make sure virtual environment is activated
-cd backend
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python tts_server.py
-```
-
-**Frontend can't connect to backend:**
-- Check that backend is running on port 3001
-- Check that TTS server is running on port 5000
-- Verify `.env` file has `GEMINI_API_KEY`
-
-## Contributing
-
-1. Follow ESLint rules in `frontend/eslint.config.js`
-2. Test changes thoroughly before committing
-3. Update this README if you add new features
-
-## Tech Stack
-
-- **Frontend**: React, Vite
-- **Backend**: Node.js, Express, Google Gemini SDK
-- **TTS**: Python, Flask, Edge TTS
-- **Auth**: JWT tokens, bcrypt
+- **TTS Error (ModuleNotFoundError)**: Ensure you activated the venv and ran `pip install flask flask-cors edge-tts`.
+- **Blank Page**: Ensure the Backend server (port 3001) is running before the Frontend.
+- **RAG not working**: Check the console logs of `server.js` for `[RAG] Embeddings generated`.
 
 ## License
 
 MIT
-
-## Acknowledgments
-
-- Google Gemini for AI capabilities
-- Microsoft Edge TTS for natural Indian voices
-- The rich cultural heritage of Karnataka 🙏
