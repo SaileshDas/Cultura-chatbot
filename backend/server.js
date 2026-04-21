@@ -12,13 +12,51 @@ const port = 3001;
 const jwtSecret = process.env.JWT_SECRET || 'dev-change-me';
 
 // --- Gemini Setup ---
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-    console.error("FATAL ERROR: GEMINI_API_KEY is not set in the .env file.");
-    process.exit(1);
+const rawApiKeys = process.env.GEMINI_API_KEYS || '';
+const apiKeys = rawApiKeys
+    .split(',')
+    .map((key) => key.trim())
+    .filter(Boolean);
+
+let geminiClients = [];
+
+if (apiKeys.length === 0) {
+    console.warn('No GEMINI_API_KEYS found. Running in offline dev mode with a stubbed Gemini client.');
+    // Provide a lightweight stub so the backend can run for local development
+    geminiClients = [{
+        models: {
+            generateContent: async (request) => {
+                return { text: 'Offline dev mode: Gemini not configured. This is a placeholder response.' };
+            }
+        }
+    }];
+} else {
+    if (apiKeys.length < 4) {
+        console.warn('[Gemini] Fewer than 4 API keys provided; failover coverage is limited.');
+    }
+
+    geminiClients = apiKeys.map((apiKey) => new GoogleGenAI({ apiKey }));
 }
 
-const ai = new GoogleGenAI({ apiKey });
+async function generateContentWithFailover(request) {
+    let lastError = null;
+
+    for (let attempt = 0; attempt < geminiClients.length; attempt++) {
+        const keyIndex = attempt;
+        try {
+            if (attempt > 0) {
+                console.warn(`[Gemini] Retrying with backup key index ${keyIndex + 1}.`);
+            }
+            return await geminiClients[keyIndex].models.generateContent(request);
+        } catch (error) {
+            lastError = error;
+            const message = error && error.message ? error.message : String(error);
+            console.error(`[Gemini] Request failed for key index ${keyIndex + 1}: ${message}`);
+        }
+    }
+
+    throw lastError || new Error('All Gemini API keys failed.');
+}
 
 // --- In-memory Users & Chats (for local development) ---
 // In production, replace this with a real database.
@@ -283,16 +321,6 @@ app.patch('/api/chats/:chatId', authMiddleware, (req, res) => {
     res.json({ chat });
 });
 
-const RAGSystem = require('./rag');
-const ragSystem = new RAGSystem(ai);
-
-// Initialize RAG on startup
-(async () => {
-    await ragSystem.loadData('./data/travel_data.json');
-})();
-
-// ... (Rest of code)
-
 // --- Chat Completion Route ---
 app.post('/api/chat', authMiddleware, async (req, res) => {
     const userMessage = req.body.message;
@@ -311,18 +339,6 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
             return res.status(404).json({ error: 'Chat not found.' });
         }
 
-        // --- RAG Step: Retrieve Context ---
-        let contextText = '';
-        try {
-            const results = await ragSystem.search(userMessage, 3);
-            if (results.length > 0) {
-                contextText = results.map(r => r.item.text).join('\n\n');
-                console.log(`[RAG] Retrieved ${results.length} chunks for context.`);
-            }
-        } catch (ragErr) {
-            console.error('[RAG] Retrieval failed (continuing without context):', ragErr);
-        }
-
         // Build contents array with full conversation history
         const contents = [
             ...chat.messages.map(msg => ({
@@ -332,9 +348,7 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
             {
                 role: 'user',
                 parts: [{
-                    text: contextText
-                        ? `Context Information:\n${contextText}\n\nUser Question: ${userMessage}`
-                        : userMessage
+                    text: userMessage
                 }]
             }
         ];
@@ -351,7 +365,7 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
         console.log(`Chat mode: ${chatMode}`);
 
         // --- Gemini API Call ---
-        const response = await ai.models.generateContent({
+        const response = await generateContentWithFailover({
             model: 'gemini-2.5-flash',
             contents: contents,
             config: {
@@ -396,6 +410,10 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`Cultura Backend listening at http://localhost:${port}`);
-});
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`Cultura Backend listening at http://localhost:${port}`);
+    });
+}
+
+module.exports = app;
