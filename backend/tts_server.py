@@ -26,6 +26,9 @@ def sanitize_text_for_speech(text):
     text = re.sub(r'__([^_]+)__', r'\1', text)  # __bold__
     text = re.sub(r'_([^_]+)_', r'\1', text)  # _italic_
     text = re.sub(r'`([^`]+)`', r'\1', text)  # `code`
+    # Remove markdown images and links
+    text = re.sub(r'!\[([^\]]*)\]\([^)]+\)', '', text) # ![alt](url) -> (removed)
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text) # [text](url) -> text
     # Remove list markers
     text = re.sub(r'^[\*\-\+]\s+', '', text, flags=re.MULTILINE)
     text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)

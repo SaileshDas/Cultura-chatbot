@@ -1175,6 +1175,14 @@
   font-weight: bold;
 }
 
+.message-content img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  display: block;
+}
+
 .message-content strong {
   color: var(--headline);
   font-weight: 600;

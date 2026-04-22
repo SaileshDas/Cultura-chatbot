@@ -1,8 +1,9 @@
-// Load environment variables from .env file
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 const { GoogleGenAI } = require('@google/genai'); // <-- Import the SDK
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -126,6 +127,8 @@ function sanitizeForTTS(text) {
         // Remove code blocks and inline code
         .replace(/```[\s\S]*?```/g, '')     // ```code``` -> (removed)
         .replace(/`([^`]+)`/g, '$1')        // `code` -> code
+        // Remove markdown images entirely
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '') // ![alt](url) -> (removed)
         // Remove links but keep text
         .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // [text](url) -> text
         // Remove other common markdown
@@ -373,7 +376,47 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
             },
         });
 
-        const textResponse = response.text.trim();
+        let textResponse = response.text.trim();
+
+        // Process [IMAGE: Topic] tag and fetch image from Wikipedia
+        const imageMatch = textResponse.match(/\[IMAGE:\s*(.+?)\]/);
+        if (imageMatch) {
+            const imageTopic = imageMatch[1].trim();
+            try {
+                const wikiRes = await axios.get(`https://en.wikipedia.org/w/api.php`, {
+                    params: {
+                        action: 'query',
+                        generator: 'search',
+                        gsrsearch: imageTopic,
+                        prop: 'pageimages',
+                        pithumbsize: 800,
+                        format: 'json'
+                    },
+                    headers: {
+                        'User-Agent': 'CulturaChatbot/1.0 (test@example.com)'
+                    }
+                });
+                
+                const pages = wikiRes.data?.query?.pages;
+                let imageUrl = '';
+                if (pages) {
+                    const pageWithImage = Object.values(pages).find(p => p.thumbnail && p.thumbnail.source);
+                    if (pageWithImage) {
+                        imageUrl = pageWithImage.thumbnail.source;
+                    }
+                }
+                
+                if (imageUrl) {
+                    textResponse = textResponse.replace(imageMatch[0], `\n\n![${imageTopic}](${imageUrl})`);
+                } else {
+                    textResponse = textResponse.replace(imageMatch[0], ''); // Remove tag if no image
+                }
+            } catch (err) {
+                console.error('Wikipedia API Error:', err.message);
+                textResponse = textResponse.replace(imageMatch[0], '');
+            }
+            textResponse = textResponse.trim();
+        }
 
         // Derive a simple title from the first user message if chat is still using default title
         if (chat.title === 'New chat' || chat.title === 'New Trip Plan' || !chat.title) {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAuth } from '../context/AuthContext';
@@ -44,7 +44,6 @@ const suggestedPrompts = [
 
 export default function ChatPage() {
   const { authToken, currentUser, API_BASE, TTS_BASE, authHeaders, saveAuth, clearAuth } = useAuth();
-  const navigate = useNavigate();
 
   // ── View state ──────────────────────────────────────────────────────────────
   const [authMode, setAuthMode] = useState('login');
@@ -298,7 +297,7 @@ export default function ChatPage() {
     [API_BASE, authToken]
   );
 
-  useEffect(() => { if (activeChatId) loadChatMessages(activeChatId); }, [activeChatId]);
+  useEffect(() => { if (activeChatId) loadChatMessages(activeChatId); }, [activeChatId, loadChatMessages]);
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ CHAT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -603,7 +602,7 @@ export default function ChatPage() {
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            input: ({ node, ...props }) => (
+                            input: (props) => (
                               <input type="checkbox" defaultChecked={props.checked} style={{ margin: '0 0.5em 0.2em 0', verticalAlign: 'middle' }} />
                             ),
                           }}
