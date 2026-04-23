@@ -38,26 +38,58 @@ if (apiKeys.length === 0) {
 
     geminiClients = apiKeys.map((apiKey) => new GoogleGenAI({ apiKey }));
 }
+    // Retry/backoff configuration (can be overridden via environment)
+    const GEMINI_ATTEMPTS_PER_KEY = Number(process.env.GEMINI_ATTEMPTS_PER_KEY || 3); // total attempts per key
+    const GEMINI_RETRY_BASE_MS = Number(process.env.GEMINI_RETRY_BASE_MS || 500); // base backoff in ms
 
-async function generateContentWithFailover(request) {
-    let lastError = null;
-
-    for (let attempt = 0; attempt < geminiClients.length; attempt++) {
-        const keyIndex = attempt;
-        try {
-            if (attempt > 0) {
-                console.warn(`[Gemini] Retrying with backup key index ${keyIndex + 1}.`);
-            }
-            return await geminiClients[keyIndex].models.generateContent(request);
-        } catch (error) {
-            lastError = error;
-            const message = error && error.message ? error.message : String(error);
-            console.error(`[Gemini] Request failed for key index ${keyIndex + 1}: ${message}`);
-        }
+    function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
-    throw lastError || new Error('All Gemini API keys failed.');
-}
+    async function generateContentWithFailover(request) {
+        let lastError = null;
+
+        for (let keyIndex = 0; keyIndex < geminiClients.length; keyIndex++) {
+            const client = geminiClients[keyIndex];
+
+            for (let attempt = 1; attempt <= GEMINI_ATTEMPTS_PER_KEY; attempt++) {
+                try {
+                    if (keyIndex > 0 && attempt === 1) {
+                        console.warn(`[Gemini] Retrying with backup key index ${keyIndex + 1}.`);
+                    }
+
+                    if (attempt > 1) {
+                        const backoff = GEMINI_RETRY_BASE_MS * Math.pow(2, attempt - 2);
+                        const jitter = Math.floor(Math.random() * 300);
+                        const delay = backoff + jitter;
+                        console.warn(`[Gemini] Waiting ${delay}ms before retrying key ${keyIndex + 1} (attempt ${attempt}/${GEMINI_ATTEMPTS_PER_KEY})`);
+                        await sleep(delay);
+                    }
+
+                    const response = await client.models.generateContent(request);
+                    return response;
+                } catch (error) {
+                    lastError = error;
+                    const status = (error && (error.status || (error.error && error.error.code) || (error.response && error.response.status))) || null;
+                    const message = error && (error.message || JSON.stringify(error.error || error)) || String(error);
+                    console.error(`[Gemini] Request failed for key index ${keyIndex + 1} (attempt ${attempt}): ${message}`);
+
+                    // If the key is invalid/unauthorized, skip to next key immediately
+                    if ([401, 403].includes(status)) {
+                        console.error(`[Gemini] Non-retryable error for key ${keyIndex + 1} (status ${status}). Skipping this key.`);
+                        break;
+                    }
+
+                    // If we've exhausted attempts for this key, move to the next key
+                    if (attempt === GEMINI_ATTEMPTS_PER_KEY) {
+                        console.warn(`[Gemini] Exhausted attempts for key index ${keyIndex + 1}. Moving to next key.`);
+                    }
+                }
+            }
+        }
+
+        throw lastError || new Error('All Gemini API keys failed after retries.');
+    }
 
 // --- In-memory Users & Chats (for local development) ---
 // In production, replace this with a real database.
