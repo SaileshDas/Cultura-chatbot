@@ -38,54 +38,122 @@ if (apiKeys.length === 0) {
 
     geminiClients = apiKeys.map((apiKey) => new GoogleGenAI({ apiKey }));
 }
-    // Retry/backoff configuration (can be overridden via environment)
-    const GEMINI_ATTEMPTS_PER_KEY = Number(process.env.GEMINI_ATTEMPTS_PER_KEY || 3); // total attempts per key
-    const GEMINI_RETRY_BASE_MS = Number(process.env.GEMINI_RETRY_BASE_MS || 500); // base backoff in ms
+    // Retry/backoff and fallback configuration (override via environment)
+    const GEMINI_ATTEMPTS_PER_KEY = Number(process.env.GEMINI_ATTEMPTS_PER_KEY || 3);
+    const GEMINI_RETRY_BASE_MS = Number(process.env.GEMINI_RETRY_BASE_MS || 500);
+    const GEMINI_GLOBAL_RETRIES = Number(process.env.GEMINI_GLOBAL_RETRIES || 2);
+    const GEMINI_GLOBAL_BACKOFF_MS = Number(process.env.GEMINI_GLOBAL_BACKOFF_MS || 1000);
+    const GEMINI_ALLOW_FALLBACK = process.env.GEMINI_ALLOW_FALLBACK === 'true';
+    const GEMINI_FALLBACK_TEXT = process.env.GEMINI_FALLBACK_TEXT || 'The AI model is temporarily unavailable. Please try again later.';
 
     function sleep(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
+    function getStatusFromError(error) {
+        if (!error) return null;
+        if (typeof error.status === 'number') return error.status;
+        if (error.error && typeof error.error.code === 'number') return error.error.code;
+        if (error.response && typeof error.response.status === 'number') return error.response.status;
+        if (error.response && error.response.data && error.response.data.error && typeof error.response.data.error.code === 'number') return error.response.data.error.code;
+        return null;
+    }
+
+    function extractRetryAfterMs(error) {
+        if (!error) return null;
+
+        // Prefer HTTP headers
+        try {
+            const headers = error.response && error.response.headers;
+            const header = headers && (headers['retry-after'] || headers['Retry-After'] || headers['retry_after']);
+            if (header) {
+                const s = String(header).trim();
+                if (/^\d+$/.test(s)) {
+                    return parseInt(s, 10) * 1000; // seconds -> ms
+                }
+                const date = Date.parse(s);
+                if (!isNaN(date)) {
+                    const ms = date - Date.now();
+                    return ms > 0 ? ms : 0;
+                }
+            }
+        } catch (e) {
+            // ignore header parsing errors
+        }
+
+        // Check JSON fields commonly used by APIs
+        if (error.error) {
+            if (typeof error.error.retryAfter === 'number') return error.error.retryAfter * 1000;
+            if (typeof error.error.retry_after === 'number') return error.error.retry_after * 1000;
+            if (typeof error.error.retryAfterSeconds === 'number') return error.error.retryAfterSeconds * 1000;
+        }
+
+        return null;
+    }
+
     async function generateContentWithFailover(request) {
         let lastError = null;
 
-        for (let keyIndex = 0; keyIndex < geminiClients.length; keyIndex++) {
-            const client = geminiClients[keyIndex];
+        for (let globalAttempt = 0; globalAttempt < GEMINI_GLOBAL_RETRIES; globalAttempt++) {
+            if (globalAttempt > 0) {
+                const globalBackoff = GEMINI_GLOBAL_BACKOFF_MS * Math.pow(2, globalAttempt - 1) + Math.floor(Math.random() * 500);
+                console.warn(`[Gemini] Global retry cycle ${globalAttempt}/${GEMINI_GLOBAL_RETRIES} - waiting ${globalBackoff}ms before next cycle.`);
+                await sleep(globalBackoff);
+            }
 
-            for (let attempt = 1; attempt <= GEMINI_ATTEMPTS_PER_KEY; attempt++) {
-                try {
-                    if (keyIndex > 0 && attempt === 1) {
-                        console.warn(`[Gemini] Retrying with backup key index ${keyIndex + 1}.`);
-                    }
+            for (let keyIndex = 0; keyIndex < geminiClients.length; keyIndex++) {
+                const client = geminiClients[keyIndex];
 
-                    if (attempt > 1) {
-                        const backoff = GEMINI_RETRY_BASE_MS * Math.pow(2, attempt - 2);
-                        const jitter = Math.floor(Math.random() * 300);
-                        const delay = backoff + jitter;
-                        console.warn(`[Gemini] Waiting ${delay}ms before retrying key ${keyIndex + 1} (attempt ${attempt}/${GEMINI_ATTEMPTS_PER_KEY})`);
-                        await sleep(delay);
-                    }
+                for (let attempt = 1; attempt <= GEMINI_ATTEMPTS_PER_KEY; attempt++) {
+                    try {
+                        if (keyIndex > 0 && attempt === 1 && globalAttempt === 0) {
+                            console.warn(`[Gemini] Retrying with backup key index ${keyIndex + 1}.`);
+                        } else if (globalAttempt > 0 && keyIndex === 0 && attempt === 1) {
+                            console.warn(`[Gemini] Starting backup cycle with key index ${keyIndex + 1} (global attempt ${globalAttempt}).`);
+                        }
 
-                    const response = await client.models.generateContent(request);
-                    return response;
-                } catch (error) {
-                    lastError = error;
-                    const status = (error && (error.status || (error.error && error.error.code) || (error.response && error.response.status))) || null;
-                    const message = error && (error.message || JSON.stringify(error.error || error)) || String(error);
-                    console.error(`[Gemini] Request failed for key index ${keyIndex + 1} (attempt ${attempt}): ${message}`);
+                        if (attempt > 1) {
+                            const backoff = GEMINI_RETRY_BASE_MS * Math.pow(2, attempt - 2);
+                            const jitter = Math.floor(Math.random() * 300);
+                            const delay = backoff + jitter;
+                            console.warn(`[Gemini] Waiting ${delay}ms before retrying key ${keyIndex + 1} (attempt ${attempt}/${GEMINI_ATTEMPTS_PER_KEY})`);
+                            await sleep(delay);
+                        }
 
-                    // If the key is invalid/unauthorized, skip to next key immediately
-                    if ([401, 403].includes(status)) {
-                        console.error(`[Gemini] Non-retryable error for key ${keyIndex + 1} (status ${status}). Skipping this key.`);
-                        break;
-                    }
+                        const response = await client.models.generateContent(request);
+                        return response;
+                    } catch (error) {
+                        lastError = error;
+                        const status = getStatusFromError(error);
+                        const message = error && (error.message || JSON.stringify(error.error || error)) || String(error);
+                        console.error(`[Gemini] Request failed for key index ${keyIndex + 1} (global ${globalAttempt}, attempt ${attempt}): ${message}`);
 
-                    // If we've exhausted attempts for this key, move to the next key
-                    if (attempt === GEMINI_ATTEMPTS_PER_KEY) {
-                        console.warn(`[Gemini] Exhausted attempts for key index ${keyIndex + 1}. Moving to next key.`);
+                        // Honor Retry-After header if provided by the server
+                        const retryAfterMs = extractRetryAfterMs(error);
+                        if (retryAfterMs) {
+                            console.warn(`[Gemini] Server requested Retry-After: ${retryAfterMs}ms. Waiting before next attempt.`);
+                            await sleep(retryAfterMs + Math.floor(Math.random() * 300));
+                        }
+
+                        // If the key is invalid/unauthorized, skip to next key immediately
+                        if ([401, 403].includes(status)) {
+                            console.error(`[Gemini] Non-retryable error for key ${keyIndex + 1} (status ${status}). Skipping this key.`);
+                            break;
+                        }
+
+                        // If we've exhausted attempts for this key, move to the next key
+                        if (attempt === GEMINI_ATTEMPTS_PER_KEY) {
+                            console.warn(`[Gemini] Exhausted attempts for key index ${keyIndex + 1}. Moving to next key.`);
+                        }
                     }
                 }
             }
+        }
+
+        // After global retries, either return a graceful fallback or throw the last error
+        if (GEMINI_ALLOW_FALLBACK) {
+            console.warn('[Gemini] All keys failed; returning graceful fallback response per configuration.');
+            return { text: GEMINI_FALLBACK_TEXT };
         }
 
         throw lastError || new Error('All Gemini API keys failed after retries.');
